@@ -1,0 +1,2 @@
+# Ignore the upstream PyTorch clone (300M+)
+pytorch/
