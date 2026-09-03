@@ -1,0 +1,42 @@
+name: Trigger Ascend Nightly
+
+on:
+  schedule:
+    - cron: '0 23 * * *' # UTC 23:00 = Beijing 07:00
+  workflow_dispatch: # keep manual trigger for testing
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check upstream nightly status (guard)
+        env:
+          GH_TOKEN: ${{ secrets.ASCEND_PAT }}
+        run: |
+          set -euo pipefail
+          ACTIVE=$(gh run list --workflow=nightly.yml --repo Ascend/pytorch \
+            --status in_progress --json databaseId --jq 'length')
+          QUEUED=$(gh run list --workflow=nightly.yml --repo Ascend/pytorch \
+            --status queued --json databaseId --jq 'length')
+          if [ "$((ACTIVE + QUEUED))" -gt 0 ]; then
+            echo "Skipped: upstream nightly already active (${ACTIVE} running, ${QUEUED} queued)" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "SKIP=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Trigger Ascend/pytorch nightly
+        if: env.SKIP != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ASCEND_PAT }}
+        run: |
+          set -euo pipefail
+          gh workflow run nightly.yml --repo Ascend/pytorch --ref ci-test
+          sleep 15
+          echo "### Triggered upstream run" >> "$GITHUB_STEP_SUMMARY"
+          gh run list --workflow=nightly.yml --repo Ascend/pytorch \
+            --event workflow_dispatch -L 1 \
+            --json url,createdAt,databaseId \
+            | tee -a "$GITHUB_STEP_SUMMARY"
