@@ -105,6 +105,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nightly-decoupling-report-${{ steps.find-run.outputs.run_id }}
-          path: out/**/*
+          path: |
+            out/**/*
+            !out/**/report.zip
           retention-days: 90
           if-no-files-found: error
