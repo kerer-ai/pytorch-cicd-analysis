@@ -1,0 +1,221 @@
+{
+  "# 说明": "失败用例分类规则配置，按优先级从上到下匹配，匹配到即停止",
+  "# common": "跨分类冲突关键字统一入口，子分类按优先级细分",
+  "# 主分类rules规则类型": "regex=正则匹配(不区分大小写) | keyword=关键字包含匹配(不区分大小写) | all_keywords=所有关键字都包含(AND)",
+  "# 子分类规则类型": "keyword=关键字包含 | keywords_any=任一匹配(OR) | keywords_all=全部包含(AND) | keywords_all_required+keywords_any=required全满足+any任一 | keywords_all_alt=全部包含(AND,与keywords_any组合用) | regex=正则 | fallback_keywords=兜底关键字 | keyword_required+keyword=必须同时满足",
+  "# 断言/其他子分类额外": "extra_keywords=额外关键字(任一匹配)",
+  "# evidence": "所有规则类型自动提取原生日志上下文片段，无需配置evidence字段",
+  "# exclude_keywords": "排除关键字列表, 含任一排除关键字时跳过该分类",
+  "# 大小写": "所有关键字/正则匹配均不区分大小写，配置中保留原始大小写以增强可读性",
+  "# CANN问题": "由 conf/UNSUPPORTED.json 单独定义，分类名命中名单则标记为CANN问题",
+
+  "categories": [
+    {
+      "name": "dtype不支持",
+      "exclude_keywords": ["ERR00100", "PTA call acl api failed"],
+      "rules": [
+        {"regex": "input dtype or format is not supported, get io input info is \\S+"},
+        {"regex": "only supported \\w+, but get\\w+"},
+        {"regex": "input type \\(\\w+\\) and bias type \\(\\w+\\) should be the same"},
+        {"regex": "input type \\(\\w+\\) and weight type \\(\\w+\\) should be the same"},
+        {"regex": "dtype \\(torch\\.\\w+\\) does not match weight dtype"},
+        {"regex": "scalar_type:\\w+is not surpported"},
+        {"regex": "only supported \\w+"},
+        {"regex": "The supported dtypes for .+ are incorrect"},
+        {"regex": "not support torch\\.\\w+ dtypes"},
+        {"keyword": "ERR01002"},
+        {"keyword": "not support dtype"},
+        {"keyword": "input dtype or format is not supported"},
+        {"keyword": "type promoting not supported"},
+        {"keyword": "must be half, float or bfloat16"},
+        {"keyword": "must be half or float or int32 or bfloat16"},
+        {"keyword": "must be half, float, int or short or bfloat16"},
+        {"keyword": "elements in indices should be type int64"},
+        {"keyword": "all tensors must have the same dtype"}
+      ],
+      "subcategories": [
+        {"name": "dtype不支持-UInt64", "keyword": "uint64"},
+        {"name": "dtype不支持-UInt32", "keyword": "uint32"},
+        {"name": "dtype不支持-UInt16", "keyword": "uint16"},
+        {"name": "dtype不支持-ComplexHalf", "keyword": "complexhalf"},
+        {"name": "dtype不支持-DT_COMPLEX128", "keyword": "dt_complex128"},
+        {"name": "dtype不支持-DT_DOUBLE", "keyword": "dt_double"},
+        {"name": "dtype不支持-DT_INT32", "keyword": "dt_int32"},
+        {"name": "dtype不支持-DT_BFLOAT16", "keyword": "dt_bfloat16"},
+        {"name": "dtype不支持-svd_npu仅支持Float", "keyword": "svd_npu only supported"},
+        {"name": "dtype不支持-float64/double权重不匹配", "keywords_any": ["float64", "double", "npuDoubleType"]},
+        {"name": "dtype不支持-仅支持Float", "keyword": "only supported float"},
+        {"name": "dtype不支持-dtype声明不正确", "keyword": "supported dtypes for"},
+        {"name": "dtype不支持-Type promoting不支持", "keyword": "type promoting not supported"},
+        {"name": "dtype不支持-Autograd不支持", "keyword": "autograd not support dtype"},
+        {"name": "dtype不支持-所有tensor dtype必须相同", "keyword": "all tensors must have the same dtype"}
+      ]
+    },
+    {
+      "name": "dtype不匹配",
+      "rules": [
+        {"regex": "The values for attribute 'dtype' do not match"},
+        {"regex": "Dtypes torch\\.\\w+ and torch\\.\\w+ are not equal"},
+        {"regex": "Tensor with dtype torch\\.\\w+ is not the expected dtype of torch\\.\\w+"},
+        {"regex": "expected dtype \\w+ but got dtype \\w+"},
+        {"regex": "the \\w+ given to \\w+ has dtype \\w+ but the operation's result requires dtype \\w+"},
+        {"regex": "Object comparison failed: torch\\.\\w+ != torch\\.\\w+"},
+        {"regex": "dtype.*do not match"},
+        {"keyword": "dtype mismatch"},
+        {"keyword": "Input data type should not be float64"}
+      ]
+    },
+    {
+      "name": "Backend选择错误",
+      "rules": [
+        {"keyword": "_ConvBackend.Overrideable"}
+      ]
+    },
+    {
+      "name": "内存格式错误",
+      "rules": [
+        {"keyword": "Only c10::MemoryFormat::Contiguous is supported"},
+        {"regex": "_cdist_backward requires \\w+ to be contiguous"},
+        {"keyword": "memoryformat::contiguous"},
+        {"keyword": "to be a contiguous tensor"}
+      ]
+    },
+    {
+      "name": "common",
+      "rules": [
+        {"keyword": "ERR00100"},
+        {"keyword": "PTA call acl api failed"},
+        {"keyword": "AclrtSynchronizeStreamWithTimeout"},
+        {"regex": "call aclnn\\w+ failed, error code is \\d+"},
+        {"regex": "call aclnn\\w+ failed"},
+        {"all_keywords": ["call aclnn", "failed", "EZ1001"]},
+        {"keyword": "call aclnn"},
+        {"keyword": "Inner error is reported as above"},
+        {"keyword": "acl stream synchronize failed"},
+        {"regex": "object comparison failed.*backend"},
+        {"regex": "has not been supported"},
+        {"keyword": "internal assert failed"},
+        {"keywords_all": ["inner error", "process exits"]},
+        {"keyword": "not implemented for"}
+      ],
+      "subcategories": [
+        {"name": "Backend选择错误", "keywords_all": ["object comparison failed", "backend"]},
+        {"name": "ACL流同步失败", "keyword": "acl stream synchronize failed"},
+        {"name": "PTA调用acl api失败", "keywords_any": ["ERR00100", "PTA call acl api failed", "AclrtSynchronizeStreamWithTimeout"]},
+        {"name": "aclnn调用失败", "keywords_any": ["call aclnn", "Inner error is reported as above"]},
+        {"name": "INTERNAL_ASSERT", "keyword": "internal assert failed"},
+        {"name": "dtype不支持", "keyword": "has not been supported"},
+        {"name": "dtype不支持", "regex": "not implemented for\\s+['\"]\\w+['\"]"},
+        {"name": "进程内部错误退出", "keywords_all": ["inner error", "process exits"]}
+      ]
+    },
+    {
+      "name": "算子未实现",
+      "rules": [
+        {"regex": "Could not run '[^']+' with arguments from the '\\w+' backend"},
+        {"keyword": "ERR01004"},
+        {"keyword": "not in libopapi.so"},
+        {"keyword": "NotImplementedError"}
+      ]
+    },
+    {
+      "name": "NPU设备不支持",
+      "rules": [
+        {"keyword": "only supports cpu, cuda and xpu"},
+        {"keyword": "no backend type associated with device type npu"},
+        {"keyword": "creating a npu tensor"},
+        {"keyword": "backend not supported for npu"}
+      ]
+    },
+    {
+      "name": "reshape零元素失败",
+      "rules": [
+        {"regex": "cannot reshape tensor of 0 elements into shape"}
+      ]
+    },
+    {
+      "name": "LAPACK/BLAS库缺失",
+      "rules": [
+        {"regex": "Calling torch\\..+? on a CPU tensor requires compiling PyTorch with (LAPACK|BLAS)"},
+        {"keyword": "lapack library not found in compilation"},
+        {"keyword": "requires compiling PyTorch with BLAS"}
+      ]
+    },
+    {
+      "name": "FakeTensor比较不一致",
+      "rules": [
+        {"keyword": "when comparing the output of"}
+      ]
+    },
+    {
+      "name": "Meta tensor错误",
+      "rules": [
+        {"keyword": "meta disagrees with real impl"},
+        {"keyword": "cannot repeat_interleave a meta tensor"},
+        {"keyword": "meta tensor"}
+      ]
+    },
+    {
+      "name": "分布式通信失败",
+      "rules": [
+        {"all_keywords": ["exited with error code 10", "communicator"]},
+        {"all_keywords": ["exited with error code 10", "hccl"]}
+      ]
+    },
+    {
+      "name": "超时",
+      "rules": [
+        {"keyword": "TimeoutError"},
+        {"keyword": "timeout"}
+      ],
+      "exclude_keywords": ["hccl_connect_timeout", "communicator creation interface", "AclrtSynchronizeStreamWithTimeout", "PTA call acl api failed"]
+    },
+    {
+      "name": "意外成功",
+      "rules": [
+        {"keyword": "unexpected success"}
+      ]
+    }
+  ],
+
+  "assertion_subcategories": {
+    "# 说明": "断言失败的子分类规则，当主分类为断言失败时按此细分",
+    "rules": [
+      {"name": "断言失败-数值精度不匹配", "keywords_any": ["tensor-likes are not", "scalars are not", "jacobian", "gradcheckerror"]},
+      {"name": "断言失败-shape不匹配", "keywords_any": ["shape"], "keywords_all_required": ["do not match"]},
+      {"name": "断言失败-vec内核未生成", "regex": "expected\\s+\\d*\\s*vec kernels?, got 0", "keywords_any": ["vec_kernel_count", "vec kernels, got 0"]},
+      {"name": "断言失败-环境未编译", "keyword": "not compiled with cuda enabled"},
+      {"name": "断言失败-异常未抛出", "keyword": "not raised"},
+      {"name": "断言失败-布尔断言", "keyword": "is not true"},
+      {"name": "断言失败-输入校验", "regex": "(input|step|elements).+must be"},
+      {"name": "断言失败-设备不一致", "keyword": "same device"}
+    ],
+    "default": {"name": "断言失败-其他"}
+  },
+
+  "other_subcategories": {
+    "# 说明": "「其他」类的子分类规则",
+    "rules": [
+      {"name": "其他-编译错误", "keywords_any": ["CppCompileError", "C++ compile error"]},
+      {"name": "其他-onednn/mkldnn不可用", "keywords_any": ["oneDNN is not available", "unimplemented as onednn"]},
+      {"name": "其他-符号推断失败", "keywords_any": ["symbolic expressions cannot be cast", "'SymFloat'", "'SymInt'", "'SymNode'"]},
+      {"name": "其他-属性缺失", "regex": "'([^']+)' object has no attribute '([^']+)'", "fallback_keywords": ["has no attribute", "AttributeError"]},
+      {"name": "其他-FX图序列化失败", "keywords_any": ["graph_pickler", "MissingOperators", "missing lowering"]},
+      {"name": "其他-索引/维度越界", "keywords_any": ["index out of range", "dimension out of range", "out of range", "dimension specified as", "IndexError"]},
+      {"name": "其他-导入错误", "keywords_any": ["cannot import name", "ImportError"]},
+      {"name": "其他-Dynamo不支持", "keywords_any": ["BackendCompilerFailed"], "keywords_all_alt": ["_dynamo", "unsupported"]},
+      {"name": "其他-进程异常退出", "regex": "process \\d+ exited with error code"},
+      {"name": "其他-测试签名问题", "keyword": "missing", "keyword_required": "required positional argument"},
+      {"name": "其他-Inductor编译错误", "keywords_any": ["InductorError", "failed to import /tmp/torchinductor", "expected to find", "torchinductor_root"]},
+      {"name": "其他-comparing断言", "regex": "^comparing"},
+      {"name": "其他-ValueError类型转换", "keyword": "cannot be safely cast to type"},
+      {"name": "其他-_refs不支持", "keyword": "no _refs support for"},
+      {"name": "其他-Shape不匹配", "regex": "shapes torch\\.size\\(\\[.+\\]\\) and torch\\.size\\(\\[.+\\]\\) are not equal"},
+      {"name": "其他-维度扩展不匹配", "keyword": "the expanded size of the tensor"},
+      {"name": "其他-step必须非零", "keyword": "step must be nonzero"},
+      {"name": "其他-Tracing tensor取值", "keyword": "trying to get value out of a tracing tensor"},
+      {"name": "其他-KeyError", "keyword": "KeyError"}
+    ],
+    "default": {"name": "其他-未归类"}
+  }
+}

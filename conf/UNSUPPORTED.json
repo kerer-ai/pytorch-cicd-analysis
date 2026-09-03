@@ -1,0 +1,49 @@
+{
+  "# 说明": "CANN问题分类名单 + 不支持模式检测规则",
+  "# cann_categories": "分类名命中此名单的失败用例标记为CANN问题",
+  "# unsupported_patterns": "不支持模式检测，keywords数组内全部命中才算匹配(AND逻辑)，category为黑名单category字段",
+  "# running_skiped": "运行时跳过模式检测，keywords数组内全部命中才算匹配(AND逻辑)，category为黑名单category字段",
+  "# 大小写": "关键字匹配不区分大小写，配置中保留原始大小写以增强可读性",
+
+  "cann_categories": [
+    "PTA调用acl api失败",
+    "LAPACK/BLAS库缺失",
+    "dtype不支持-UInt64",
+    "dtype不支持-UInt16",
+    "dtype不支持-UInt32",
+    "dtype不匹配",
+    "dtype不支持-svd_npu仅支持Float",
+    "dtype不支持-float64/double权重不匹配",
+    "内存格式错误",
+    "Backend选择错误",
+    "dtype不支持",
+    "dtype不支持-dtype声明不正确",
+    "ACL流同步失败",
+    "其他-_refs不支持",
+    "dtype不支持-Autograd不支持",
+    "算子未实现",
+    "dtype不支持-ComplexHalf",
+    "NPU设备不支持"
+  ],
+
+  "unsupported_patterns": [
+    {"category": "dtype_not_supported", "keywords": ["not implemented for DT_COMPLEX"]},
+    {"category": "dtype_not_supported", "keywords": ["not implemented for DT_DOUBLE"]},
+    {"category": "dtype_not_supported", "keywords": ["Exception: Caused by sample input at index", "dtype=torch.float64"]},
+    {"category": "dtype_not_supported", "keywords": ["Exception: Caused by sample input at index", "dtype=torch.complex"]},
+    {"category": "dtype_not_supported", "keywords": ["Exception: Caused by error input at index", "dtype=torch.float64"]},
+    {"category": "dtype_not_supported", "keywords": ["Exception: Caused by error input at index", "dtype=torch.complex"]},
+    {"category": "dtype_not_supported", "keywords": ["Exception: Caused by reference input at index", "dtype=torch.float64"]},
+    {"category": "dtype_not_supported", "keywords": ["Exception: Caused by reference input at index", "dtype=torch.complex"]},
+    {"category": "cann_not_supported", "keywords": ["cannot be larger than 8 dimensions"]},
+    {"category": "cann_not_supported", "keywords": ["Jiterator is only supported on CUDA"]},
+    {"category": "cann_not_supported", "keywords": ["Only contiguous_format or preserve_format is supported"]},
+    {"category": "cann_not_supported", "keywords": ["NPU contiguous operator only supported contiguous memory format"]},
+    {"category": "cann_not_supported", "keywords": ["aten::_scaled_dot_product_flash_attention"]},
+    {"category": "cann_not_supported", "keywords": ["aten::_fill_mem_eff_dropout_mask_"]}
+  ],
+
+  "running_skiped": [
+    {"category": "device_not_supported", "keywords": ["Only runs on cuda"]}
+  ]
+}

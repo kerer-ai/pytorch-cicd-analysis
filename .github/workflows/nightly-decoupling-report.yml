@@ -1,0 +1,110 @@
+name: Nightly Decoupling Report
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # UTC 02:00 = Beijing 10:00
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Ascend/pytorch nightly run ID (skips auto-discovery if set)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-decoupling-report
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: Ascend/pytorch
+  UPSTREAM_WORKFLOW: nightly.yml
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # 查找北京时间今天 00:00-10:00 内最新执行完成（success）的 nightly run；
+      # workflow_dispatch 指定 run_id 时跳过发现，直接使用
+      - name: Find latest completed nightly run (Beijing 00:00-10:00)
+        id: find-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INPUT_RUN_ID" ]; then
+            echo "run_id=$INPUT_RUN_ID" >> "$GITHUB_OUTPUT"
+            echo "### Upstream nightly run" >> "$GITHUB_STEP_SUMMARY"
+            echo "- run: manually specified [$INPUT_RUN_ID](https://github.com/$UPSTREAM_REPO/actions/runs/$INPUT_RUN_ID) (window filter bypassed)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          SINCE_UTC=$(TZ=Asia/Shanghai date -d 'today 00:00' -u '+%Y-%m-%dT%H:%M:%SZ')
+          UNTIL_UTC=$(TZ=Asia/Shanghai date -d 'today 10:00' -u '+%Y-%m-%dT%H:%M:%SZ')
+          RUN=$(gh api "repos/$UPSTREAM_REPO/actions/workflows/$UPSTREAM_WORKFLOW/runs?per_page=50" \
+            --arg since "$SINCE_UTC" --arg until "$UNTIL_UTC" \
+            --jq '[.workflow_runs[] | select(.status=="completed" and .conclusion=="success" and .updated_at >= $since and .updated_at <= $until)] | sort_by(.updated_at) | last // empty')
+          if [ -z "$RUN" ]; then
+            echo "## Skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "No completed success nightly run in Beijing window [${SINCE_UTC} .. ${UNTIL_UTC}] (= Beijing today 00:00-10:00)." >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          RUN_ID=$(echo "$RUN" | jq -r '.id')
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "### Upstream nightly run" >> "$GITHUB_STEP_SUMMARY"
+          echo "- run: [#${RUN_ID}]($(echo "$RUN" | jq -r '.html_url'))" >> "$GITHUB_STEP_SUMMARY"
+          echo "- completed at: $(echo "$RUN" | jq -r '.updated_at')" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout
+        if: steps.find-run.outputs.skip != 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        if: steps.find-run.outputs.skip != 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Download npu-full-test-summary artifact
+        if: steps.find-run.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.find-run.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          AID=$(gh api "repos/$UPSTREAM_REPO/actions/runs/$RUN_ID/artifacts" \
+            --jq '.artifacts[] | select(.name | startswith("npu-full-test-summary")) | .id' | head -1)
+          if [ -z "$AID" ]; then
+            echo "::error::npu-full-test-summary artifact not found for run $RUN_ID"
+            exit 1
+          fi
+          gh api "repos/$UPSTREAM_REPO/actions/artifacts/$AID/zip" > npu-full-test-summary.zip
+          ls -lh npu-full-test-summary.zip
+
+      - name: Generate decoupling report
+        if: steps.find-run.outputs.skip != 'true'
+        env:
+          RUN_ID: ${{ steps.find-run.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          go build -o reportgen ./cmd/reportgen
+          ./reportgen -run-id "$RUN_ID" -artifact npu-full-test-summary.zip -out out | tee reportgen.log
+          {
+            echo "### Report stats"
+            echo '```'
+            cat reportgen.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report artifact
+        if: steps.find-run.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-decoupling-report-${{ steps.find-run.outputs.run_id }}
+          path: out/**/*
+          retention-days: 90
+          if-no-files-found: error
