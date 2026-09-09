@@ -7,10 +7,11 @@ import (
 	"strings"
 )
 
-// unsupported.go 对齐 /tmp/20260827 conf/UNSUPPORTED.json：
+// unsupported.go 对齐 /tmp/20260909 conf/UNSUPPORTED.json：
 // cann_categories（CANN 问题分类名单）、unsupported_patterns（不支持模式，AND 逻辑，
 // 大小写敏感——对齐 Python `kw in message`）、running_skiped（运行时跳过模式，
-// AND 逻辑，不区分大小写——对齐 Python _match_running_skiped）。
+// AND 逻辑，不区分大小写——对齐 Python _match_running_skiped）、
+// ops_match_category（增量 disabled 时算子名命中的兜底 category）。
 
 const unsupportedConfigName = "UNSUPPORTED.json"
 
@@ -23,12 +24,14 @@ type unsupportedFile struct {
 	CannCategories      []string         `json:"cann_categories"`
 	UnsupportedPatterns []keywordPattern `json:"unsupported_patterns"`
 	RunningSkiped       []keywordPattern `json:"running_skiped"`
+	OpsMatchCategory    string           `json:"ops_match_category"`
 }
 
 type UnsupportedConfig struct {
-	cannCategories map[string]bool
-	patterns       []keywordPattern
-	runningSkiped  []keywordPattern
+	cannCategories   map[string]bool
+	patterns         []keywordPattern
+	runningSkiped    []keywordPattern
+	opsMatchCategory string
 }
 
 func LoadUnsupportedConfig(fsys fs.FS, name string) (*UnsupportedConfig, error) {
@@ -41,14 +44,23 @@ func LoadUnsupportedConfig(fsys fs.FS, name string) (*UnsupportedConfig, error) 
 		return nil, fmt.Errorf("parse %s: %w", name, err)
 	}
 	cfg := &UnsupportedConfig{
-		cannCategories: make(map[string]bool, len(uf.CannCategories)),
-		patterns:       uf.UnsupportedPatterns,
-		runningSkiped:  uf.RunningSkiped,
+		cannCategories:   make(map[string]bool, len(uf.CannCategories)),
+		patterns:         uf.UnsupportedPatterns,
+		runningSkiped:    uf.RunningSkiped,
+		opsMatchCategory: uf.OpsMatchCategory,
 	}
 	for _, c := range uf.CannCategories {
 		cfg.cannCategories[c] = true
 	}
 	return cfg, nil
+}
+
+// OpsMatchCategory 算子名命中时的兜底 category（对齐 Python _load_ops_category）。
+func (u *UnsupportedConfig) OpsMatchCategory() string {
+	if u == nil {
+		return ""
+	}
+	return u.opsMatchCategory
 }
 
 // IsCANNCategory 分类名命中 cann_categories 名单。

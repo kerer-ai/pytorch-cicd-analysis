@@ -108,7 +108,10 @@ func setSummaryCellValue(f *excelize.File, sheet, ref string, v interface{}) {
 	case nil:
 		return
 	case string:
-		f.SetCellValue(sheet, ref, val)
+		// 空字符串不写单元格（对齐 openpyxl：空串单元格保存后读回 None）
+		if val != "" {
+			f.SetCellValue(sheet, ref, val)
+		}
 	case float64:
 		if val == math.Trunc(val) && !math.IsInf(val, 0) {
 			f.SetCellValue(sheet, ref, int64(val))
@@ -152,6 +155,12 @@ func writeSummaryReport(path string, tmpl *SummaryTemplate, orderedFiles []fileG
 			if len(parts) == 2 {
 				f.MergeCell(sheetName, parts[0], parts[1])
 			}
+		}
+
+		// dimension 对齐 openpyxl 自动写出的真实范围（cells ∪ merged 的 min/max，
+		// 如 README 的 C1:P61），避免 excelize 占位符 A1 使 openpyxl read_only 截断
+		if ref := templateExtent(entry.Sheet); ref != "" {
+			_ = f.SetSheetDimension(sheetName, ref)
 		}
 	}
 
@@ -289,4 +298,61 @@ func splitCellRef(ref string) (string, int) {
 	col := ref[:i]
 	row, _ := strconv.Atoi(ref[i:])
 	return col, row
+}
+
+// colNumber 将列字母转为 1 起始数字（A=1，Z=26，AA=27）。
+func colNumber(letters string) int {
+	n := 0
+	for _, c := range letters {
+		n = n*26 + int(c-'A'+1)
+	}
+	return n
+}
+
+// colLetterName 将 1 起始数字转为列字母。
+func colLetterName(n int) string {
+	s := ""
+	for n > 0 {
+		r := (n - 1) % 26
+		s = string(rune('A'+r)) + s
+		n = (n - 1) / 26
+	}
+	return s
+}
+
+// templateExtent 计算 sheet 的引用范围（cells ∪ merged ranges 的行列 min/max），
+// 对齐 openpyxl 写出的 dimension（如 README 的 C1:P61）；无单元格时返回空。
+func templateExtent(sheet SummarySheet) string {
+	minCol, minRow, maxCol, maxRow := 0, 0, 0, 0
+	consider := func(ref string) {
+		col, row := splitCellRef(ref)
+		if col == "" || row < 1 {
+			return
+		}
+		n := colNumber(col)
+		if minCol == 0 || n < minCol {
+			minCol = n
+		}
+		if minRow == 0 || row < minRow {
+			minRow = row
+		}
+		if n > maxCol {
+			maxCol = n
+		}
+		if row > maxRow {
+			maxRow = row
+		}
+	}
+	for ref := range sheet.Cells {
+		consider(ref)
+	}
+	for _, m := range sheet.MergedCells {
+		for _, p := range strings.SplitN(m, ":", 2) {
+			consider(p)
+		}
+	}
+	if minCol == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s%d:%s%d", colLetterName(minCol), minRow, colLetterName(maxCol), maxRow)
 }

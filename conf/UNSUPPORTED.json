@@ -27,23 +27,25 @@
   ],
 
   "unsupported_patterns": [
-    {"category": "dtype_not_supported", "keywords": ["not implemented for DT_COMPLEX"]},
-    {"category": "dtype_not_supported", "keywords": ["not implemented for DT_DOUBLE"]},
-    {"category": "dtype_not_supported", "keywords": ["Exception: Caused by sample input at index", "dtype=torch.float64"]},
-    {"category": "dtype_not_supported", "keywords": ["Exception: Caused by sample input at index", "dtype=torch.complex"]},
-    {"category": "dtype_not_supported", "keywords": ["Exception: Caused by error input at index", "dtype=torch.float64"]},
-    {"category": "dtype_not_supported", "keywords": ["Exception: Caused by error input at index", "dtype=torch.complex"]},
-    {"category": "dtype_not_supported", "keywords": ["Exception: Caused by reference input at index", "dtype=torch.float64"]},
-    {"category": "dtype_not_supported", "keywords": ["Exception: Caused by reference input at index", "dtype=torch.complex"]},
-    {"category": "cann_not_supported", "keywords": ["cannot be larger than 8 dimensions"]},
-    {"category": "cann_not_supported", "keywords": ["Jiterator is only supported on CUDA"]},
-    {"category": "cann_not_supported", "keywords": ["Only contiguous_format or preserve_format is supported"]},
-    {"category": "cann_not_supported", "keywords": ["NPU contiguous operator only supported contiguous memory format"]},
-    {"category": "cann_not_supported", "keywords": ["aten::_scaled_dot_product_flash_attention"]},
-    {"category": "cann_not_supported", "keywords": ["aten::_fill_mem_eff_dropout_mask_"]}
+    {"category": "device not supported", "keywords": ["not implemented for DT_COMPLEX"]},
+    {"category": "device not supported", "keywords": ["not implemented for DT_DOUBLE"]},
+    {"category": "device not supported", "keywords": ["Exception: Caused by sample input at index", "dtype=torch.float64"]},
+    {"category": "device not supported", "keywords": ["Exception: Caused by sample input at index", "dtype=torch.complex"]},
+    {"category": "device not supported", "keywords": ["Exception: Caused by error input at index", "dtype=torch.float64"]},
+    {"category": "device not supported", "keywords": ["Exception: Caused by error input at index", "dtype=torch.complex"]},
+    {"category": "device not supported", "keywords": ["Exception: Caused by reference input at index", "dtype=torch.float64"]},
+    {"category": "device not supported", "keywords": ["Exception: Caused by reference input at index", "dtype=torch.complex"]},
+    {"category": "cann not supported", "keywords": ["cannot be larger than 8 dimensions"]},
+    {"category": "cann not supported", "keywords": ["Jiterator is only supported on CUDA"]},
+    {"category": "cann not supported", "keywords": ["Only contiguous_format or preserve_format is supported"]},
+    {"category": "cann not supported", "keywords": ["NPU contiguous operator only supported contiguous memory format"]},
+    {"category": "cann not supported", "keywords": ["aten::_scaled_dot_product_flash_attention"]},
+    {"category": "cann not supported", "keywords": ["aten::_fill_mem_eff_dropout_mask_"]}
   ],
 
   "running_skiped": [
     {"category": "device_not_supported", "keywords": ["Only runs on cuda"]}
-  ]
+  ],
+
+  "ops_match_category": "cann not supported"
 }

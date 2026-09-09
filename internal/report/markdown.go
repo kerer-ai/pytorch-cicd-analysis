@@ -10,10 +10,11 @@ import (
 	"pytorch-cicd-analysis/internal/models"
 )
 
-// writeMarkdownReport 生成 all_testcases_report.md，对齐 /tmp/20260827 gen_report.py：
+// writeMarkdownReport 生成 all_testcases_report.md，对齐 /tmp/20260909 gen_report.py：
 // 标题「# 测试报告」+ 总体概览/执行结果分布/失败用例分类/黑名单用例统计 四章。
+// 总体概览按 all_testcases.xlsx 拆分 sheet 名（= summary 模板 sheet）分组统计。
 // 计数收集按首现顺序，排序用稳定降序（对齐 Python Counter 首现序 + sorted 稳定性）。
-func writeMarkdownReport(path string, orderedFiles []fileGroup, fileMap FileMap, ops []string, failedCatCounts []countKV, skipped []*models.SkippedCase, unsupportedCfg *UnsupportedConfig) error {
+func writeMarkdownReport(path string, orderedFiles []fileGroup, ctx *reportContext, failedCatCounts []countKV, skipped []*models.SkippedCase) error {
 	type sheetStat struct {
 		total       int
 		passed      int
@@ -22,25 +23,24 @@ func writeMarkdownReport(path string, orderedFiles []fileGroup, fileMap FileMap,
 	}
 
 	stats := map[string]*sheetStat{}
-	getStat := func(cls string) *sheetStat {
-		if st, ok := stats[cls]; ok {
+	getStat := func(sheet string) *sheetStat {
+		if st, ok := stats[sheet]; ok {
 			return st
 		}
 		st := &sheetStat{statusCount: map[string]int{}}
-		stats[cls] = st
+		stats[sheet] = st
 		return st
 	}
 
 	for _, fg := range orderedFiles {
-		fc := classifyFile(fileMap, fg.path)
-		st := getStat(fc.Classification)
+		st := getStat(ctx.sheetOf(fg.path))
 		for _, tc := range fg.cases {
 			st.total++
 			st.statusCount[tc.Status]++
 			if tc.Status == "passed" {
 				st.passed++
 			}
-			unsupported, _ := classifyCase(tc.Status, tc.Message, ops, unsupportedCfg)
+			unsupported, _ := classifyCase(tc.Status, tc.Message, ctx.ops, ctx.unsupported)
 			if unsupported == "是" {
 				st.unsupported++
 			}

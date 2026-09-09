@@ -14,6 +14,8 @@ import (
 
 // testSummaryTemplate 带最小 A/B/C 结构的模板：
 // Core sheet: A2=Core, B2=NN, C3/C4 两个文件（B 级联）；B 含 ASCII 计数被剥离。
+// Utils sheet: classification=Core / specialization=Mobile —— 用于验证拆分 sheet
+// 取模板 sheet 名（Utils）而非 Classification（Core）。
 func testSummaryTemplate() string {
 	return `{"sheets": {
 		"Core": {"cells": {
@@ -23,6 +25,11 @@ func testSummaryTemplate() string {
 			"C4": {"value": "test/nn/test_batchnorm.py"},
 			"B5": {"value": "Autograd (11)"},
 			"C5": {"value": "test/autograd/test_taylor.py"}
+		}, "merged_cells": [], "column_widths": {}},
+		"Utils": {"cells": {
+			"A1": {"value": "Classification"}, "B1": {"value": "Specialization"}, "C1": {"value": "File"},
+			"A2": {"value": "Core"}, "B2": {"value": "Mobile"},
+			"C2": {"value": "test/mobile/test_mobile.py"}
 		}, "merged_cells": [], "column_widths": {}}
 	}}`
 }
@@ -52,13 +59,17 @@ func testInput() Input {
 			{NodeID: "test_dropout.py::TestDropout::test_dropout_1d", FilePath: "test/nn/test_dropout.py", Status: "failed", ErrorMessage: "RuntimeError: call aclnnFoo failed, error code is 10001"},
 			{NodeID: "test_dropout.py::TestDropout::test_dropout_p", FilePath: "test/nn/test_dropout.py", Status: "passed"},
 			{NodeID: "test_batchnorm.py::TestBN::test_bn", FilePath: "test/nn/test_batchnorm.py", Status: "skipped", ErrorMessage: "Skipped: Only runs on cuda devices"},
+			{NodeID: "test_mobile.py::TestMobile::test_m", FilePath: "test/mobile/test_mobile.py", Status: "failed", ErrorMessage: "AssertionError: Tensor-likes are not close!"},
 			{NodeID: "test_tensorexpr.py::TestTE::test_te", FilePath: "test/test_tensorexpr.py", Status: "failed", ErrorMessage: "AssertionError: Tensor-likes are not close!"},
 		},
 		FileResults: []*models.TestFileResult{
 			{RunID: 123, FilePath: "test/nn/test_dropout.py", TestType: "core", TotalCases: 2},
 			{RunID: 123, FilePath: "test/nn/test_batchnorm.py", TestType: "core", TotalCases: 1},
+			{RunID: 123, FilePath: "test/mobile/test_mobile.py", TestType: "others", TotalCases: 1},
 			{RunID: 123, FilePath: "test/zero_cases.py", TestType: "core", TotalCases: 0},
 		},
+		CPUPrecollect: map[string]int{"test/nn/test_dropout.py": 5, "test/nn/test_batchnorm.py": 3},
+		NPUPrecollect: map[string]int{"test/nn/test_dropout.py": 4},
 		Skipped: []*models.SkippedCase{
 			{RunID: 123, NodeID: "test/nn/test_init.py::TestNNInit::test_orthogonal", FilePath: "test/nn/test_init.py", SkipReason: "PyTorch compiled without Lapack", SkipCategory: "", SkipSource: "running_skiped_testcases.json"},
 			{RunID: 123, NodeID: "test/nn/test_convolution.py::TestConv::test_conv2d", FilePath: "test/nn/test_convolution.py", SkipReason: "not implemented for DT_COMPLEX", SkipCategory: "device not supported", SkipSource: "disabled_testcases.json"},
@@ -157,8 +168,9 @@ func TestAllTestcasesNineColumnsAndSheets(t *testing.T) {
 	defer f.Close()
 
 	sheets := f.GetSheetList()
-	// 首现序：dropout(Core/NN 先出现) -> Core sheet；tensorexpr 未匹配 -> Other 最后；黑名单跳过末尾
-	wantSheets := []string{"all_files", "all_testcases", "Core", "Other", "黑名单跳过"}
+	// 首现序：dropout(Core sheet) -> Core；mobile(模板 Utils sheet，虽然 Classification=Core)
+	// -> Utils；tensorexpr 未匹配 -> Other 最后；黑名单跳过末尾
+	wantSheets := []string{"all_files", "all_testcases", "Core", "Utils", "Other", "黑名单跳过"}
 	if len(sheets) != len(wantSheets) {
 		t.Fatalf("sheets = %v, want %v", sheets, wantSheets)
 	}
@@ -179,8 +191,8 @@ func TestAllTestcasesNineColumnsAndSheets(t *testing.T) {
 
 	// F/G 列状态条件：passed 行 F/G 为空；skipped 行 G 为首行
 	rows, _ := f.GetRows("all_testcases")
-	if len(rows) != 5 {
-		t.Fatalf("all_testcases should have 4 data rows, got %d", len(rows)-1)
+	if len(rows) != 6 {
+		t.Fatalf("all_testcases should have 5 data rows, got %d", len(rows)-1)
 	}
 	getVal := func(col string, row int) string {
 		v, _ := f.GetCellValue("all_testcases", fmt.Sprintf("%s%d", col, row))
@@ -206,6 +218,12 @@ func TestAllTestcasesNineColumnsAndSheets(t *testing.T) {
 	if cls != "Core" || spec != "NN" {
 		t.Errorf("Core sheet A2/B2 = %q/%q, want Core/NN", cls, spec)
 	}
+	// Utils sheet：拆分名取模板 sheet 名，但 A/B 仍是模板的 Classification/Specialization
+	ucls, _ := f.GetCellValue("Utils", "A2")
+	uspec, _ := f.GetCellValue("Utils", "B2")
+	if ucls != "Core" || uspec != "Mobile" {
+		t.Errorf("Utils sheet A2/B2 = %q/%q, want Core/Mobile", ucls, uspec)
+	}
 	ocls, _ := f.GetCellValue("Other", "A2")
 	ospec, _ := f.GetCellValue("Other", "B2")
 	if ocls != "Other" || ospec != "Other" {
@@ -228,7 +246,7 @@ func TestAllTestcasesNineColumnsAndSheets(t *testing.T) {
 	}
 }
 
-func TestAllFilesSheetJointMerge(t *testing.T) {
+func TestAllFilesSheetHierarchicalMerge(t *testing.T) {
 	workDir := generateForTest(t, testInput())
 	f, err := excelize.OpenFile(filepath.Join(workDir, "all_testcases.xlsx"))
 	if err != nil {
@@ -236,31 +254,53 @@ func TestAllFilesSheetJointMerge(t *testing.T) {
 	}
 	defer f.Close()
 
-	// 排序后：Core/Autograd(zero_cases 未匹配->Other) ... 检查 joint 合并：同 (cls,spec) 相邻行合并 A/B
+	// 7 列表头
+	wantHeader := []string{"sheet", "Classification", "Specialization", "File", "实际运行数量", "CPU预收集", "NPU预收集"}
+	for i, h := range wantHeader {
+		got, _ := f.GetCellValue("all_files", cellName(i, 1))
+		if got != h {
+			t.Errorf("all_files header col %d = %q, want %q", i, got, h)
+		}
+	}
+
+	// 排序后（sheet,cls,spec,file）：Core/Core/NN/{batchnorm,dropout}，Other/Other/Other/zero_cases，Utils/Core/Mobile/mobile
 	rows, _ := f.GetRows("all_files")
-	if len(rows) != 4 {
-		t.Fatalf("all_files should have 3 data rows, got %d", len(rows)-1)
+	if len(rows) != 5 {
+		t.Fatalf("all_files should have 4 data rows, got %d", len(rows)-1)
 	}
-	// test/nn/test_dropout.py 与 test_batchnorm 同为 (Core,NN) → A/B 合并为一组
+	wantRows := [][]string{
+		{"Core", "Core", "NN", "test/nn/test_batchnorm.py", "1", "3", "0"},
+		// A/B/C 已被层级合并覆盖，GetRows 读回非锚点为空
+		{"", "", "", "test/nn/test_dropout.py", "2", "5", "4"},
+		{"Other", "Other", "Other", "test/zero_cases.py", "0", "0", "0"},
+		{"Utils", "Core", "Mobile", "test/mobile/test_mobile.py", "1", "0", "0"},
+	}
+	for r, want := range wantRows {
+		for c := 0; c < len(want); c++ {
+			got := cellAt(rows[r+1], c)
+			if got != want[c] {
+				t.Errorf("all_files row %d col %d = %q, want %q (row=%v)", r+2, c, got, want[c], rows[r+1])
+			}
+		}
+	}
+
+	// 层级合并：A(sheet) Core 两行合并 A2:A3；B(cls) A+B 同 Core 两行合并 B2:B3；
+	// C(spec) A+B+C 全同的 NN 两行合并 C2:C3
 	merges, _ := f.GetMergeCells("all_files")
-	var mergedAB bool
+	mergedRefs := map[string]bool{}
 	for _, m := range merges {
-		if m.GetStartAxis() == "A2" && m.GetEndAxis() == "A3" {
-			mergedAB = true
+		mergedRefs[m.GetStartAxis()+"-"+m.GetEndAxis()] = true
+	}
+	for _, want := range []string{"A2-A3", "B2-B3", "C2-C3"} {
+		if !mergedRefs[want] {
+			t.Errorf("all_files should merge %s (hierarchical), merges=%v", want, mergedRefs)
 		}
 	}
-	if !mergedAB {
-		t.Errorf("all_files should merge A2:A3 for same (cls,spec), merges=%v", merges)
-	}
-	// num 列
-	numByFile := map[string]string{}
-	for _, row := range rows[1:] {
-		if len(row) >= 4 {
-			numByFile[row[2]] = row[3]
+	// 不同 (sheet,cls) 的行不合并：Utils 行、Other 行均为独立单元格
+	for _, unwanted := range []string{"A2-A4", "A2-A5", "B3-B4", "C3-C4"} {
+		if mergedRefs[unwanted] {
+			t.Errorf("all_files should NOT merge %s, merges=%v", unwanted, mergedRefs)
 		}
-	}
-	if numByFile["test/nn/test_dropout.py"] != "2" || numByFile["test/zero_cases.py"] != "0" {
-		t.Errorf("all_files num = %v", numByFile)
 	}
 }
 
@@ -274,7 +314,8 @@ func TestSkipFirstLineOnlyForSkipped(t *testing.T) {
 		},
 	}}
 	path := filepath.Join(t.TempDir(), "all_testcases.xlsx")
-	if err := writeAllTestcases(path, orderedFiles, FileMap{}, nil, nil, nil, nil); err != nil {
+	ctx := &reportContext{fileMap: FileMap{}, sheetMap: map[string]string{}}
+	if err := writeAllTestcases(path, orderedFiles, ctx, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	f, err := excelize.OpenFile(path)
@@ -298,6 +339,33 @@ func TestSkipFirstLineOnlyForSkipped(t *testing.T) {
 	}
 }
 
+// TestFailedCategorizeUsesTruncatedMessage 超长消息按 xlsx 单元格上限（32767 字符）
+// 截断后再分类（对齐 Python classify_failed 从 all_testcases.xlsx 回读的语义）：
+// "timeout" 关键字位于 32767 之外时不应命中超时分类。
+func TestFailedCategorizeUsesTruncatedMessage(t *testing.T) {
+	confDir := t.TempDir()
+	writeTestConf(t, confDir)
+	cat, err := NewCategorizer(os.DirFS(confDir), "failed_categories.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	longMsg := "RuntimeError: Thread 1 exited with exception:\n" + strings.Repeat("x", 40000) + "\ntimeout occurred"
+	if got := truncateCellString(longMsg); len([]rune(got)) != maxCellChars {
+		t.Fatalf("truncateCellString len = %d, want %d", len([]rune(got)), maxCellChars)
+	}
+	// 截断后不含 "timeout" → 走断言/其他路径而非超时
+	cat1, _ := cat.Categorize(truncateCellString(longMsg))
+	if cat1 == "超时" {
+		t.Errorf("truncated message should not match 超时, got %q", cat1)
+	}
+	// 完整消息含 "timeout" → 超时（证明差异确实来自截断语义）
+	cat2, _ := cat.Categorize(longMsg)
+	if cat2 != "超时" {
+		t.Errorf("full message should match 超时, got %q", cat2)
+	}
+}
+
 func TestFailedWorkbookAllFailedSheet(t *testing.T) {
 	workDir := generateForTest(t, testInput())
 	f, err := excelize.OpenFile(filepath.Join(workDir, "failed_testcases.xlsx"))
@@ -312,9 +380,9 @@ func TestFailedWorkbookAllFailedSheet(t *testing.T) {
 	}
 
 	rows, _ := f.GetRows("all_failed")
-	// 2 条失败（aclnn + assertion），无 unsupported 排除
-	if len(rows) != 3 {
-		t.Errorf("all_failed should have 2 data rows, got %d", len(rows)-1)
+	// 3 条失败（dropout aclnn + mobile/tensorexpr assertion），无 unsupported 排除
+	if len(rows) != 4 {
+		t.Errorf("all_failed should have 3 data rows, got %d", len(rows)-1)
 	}
 	cats := map[string]bool{}
 	for _, row := range rows[1:] {
@@ -359,8 +427,43 @@ func loadTemplateJSON(t *testing.T, data string, out *SummaryTemplate) error {
 	return nil
 }
 
-func TestBuildFileMapMergeAndHeaderSkip(t *testing.T) {
+// TestEffectiveMapsLimitedToFileResults 验证有效映射限定语义：
+// 仅 FileResults（all_files 行）中的文件享有模板分类/sheet，其余落 Other。
+func TestEffectiveMapsLimitedToFileResults(t *testing.T) {
 	tmpl := `{"sheets": {
+		"Core": {"cells": {"A2": {"value": "Core"}, "B2": {"value": "NN"}, "C2": {"value": "test/nn/a.py"}, "C3": {"value": "test/nn/b.py"}}},
+		"Utils": {"cells": {"A2": {"value": "Core"}, "B2": {"value": "Mobile"}, "C2": {"value": "test/mobile/m.py"}}}
+	}}`
+	var t2 SummaryTemplate
+	if err := loadTemplateJSON(t, tmpl, &t2); err != nil {
+		t.Fatal(err)
+	}
+	fileResults := []*models.TestFileResult{
+		{FilePath: "test/nn/a.py", TotalCases: 1},
+		{FilePath: "test/mobile/m.py", TotalCases: 2},
+		{FilePath: "test/unlisted.py", TotalCases: 3},
+	}
+	fm, sm := EffectiveMaps(&t2, fileResults)
+
+	if len(fm) != 3 {
+		t.Fatalf("effective fileMap size = %d, want 3", len(fm))
+	}
+	if fc := fm["test/nn/a.py"]; fc.Classification != "Core" || fc.Specialization != "NN" {
+		t.Errorf("a.py = %+v, want Core/NN", fc)
+	}
+	if fc := fm["test/unlisted.py"]; fc.Classification != "Other" || fc.Specialization != "Other" {
+		t.Errorf("unlisted.py = %+v, want Other/Other", fc)
+	}
+	if sm["test/mobile/m.py"] != "Utils" {
+		t.Errorf("m.py sheet = %q, want Utils", sm["test/mobile/m.py"])
+	}
+	// 模板内但不在 FileResults 的文件：有效映射不含 → classifyFile 落 Other
+	if fc := classifyFile(fm, "test/nn/b.py"); fc.Classification != "Other" || fc.Specialization != "Other" {
+		t.Errorf("b.py (in template, not in fileResults) = %+v, want Other/Other", fc)
+	}
+}
+
+func TestBuildFileMapMergeAndHeaderSkip(t *testing.T) {	tmpl := `{"sheets": {
 		"README": {"cells": {"A2": {"value": "Core"}, "C3": {"value": "readme_file.py"}}},
 		"Core": {"cells": {
 			"A1": {"value": "Classification"}, "B1": {"value": "Specialization"}, "C1": {"value": "File"},
@@ -471,7 +574,7 @@ func TestBlacklistJSONOrderAndFormat(t *testing.T) {
 		t.Errorf("disabled json key order should be insertion order, content:\n%s", content)
 	}
 	// 增量条目：category 来自 typeMap，issue 空
-	if !strings.Contains(content, `"mmm/incr.py::TestC::t3": {"category": "dtype_not_supported", "reason": "not implemented for DT_DOUBLE", "issue": ""}`) {
+	if !strings.Contains(content, `"mmm/incr.py::TestC::t3": {"category": "device not supported", "reason": "not implemented for DT_DOUBLE", "issue": ""}`) {
 		t.Errorf("incremental entry format mismatch:\n%s", content)
 	}
 	// 字节级格式
@@ -492,7 +595,7 @@ func TestBlacklistJSONOrderAndFormat(t *testing.T) {
 }
 
 // TestBlacklistIncrementalOpOnly 增量 disabled 须含 op 命中（非仅 pattern），
-// op-only 条目 category 为空串。
+// op-only 条目 category 走 ops_match_category 兜底（对齐 /tmp/20260909 UNSUPPORTED.json）。
 func TestBlacklistIncrementalOpOnly(t *testing.T) {
 	in := testInput()
 	in.Skipped = nil
@@ -506,8 +609,8 @@ func TestBlacklistIncrementalOpOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := string(data)
-	if !strings.Contains(content, `"op_only.py::T::t": {"category": "", "reason": "aclnnAdd", "issue": ""}`) {
-		t.Errorf("op-only incremental entry should exist with empty category:\n%s", content)
+	if !strings.Contains(content, `"op_only.py::T::t": {"category": "cann not supported", "reason": "aclnnAdd", "issue": ""}`) {
+		t.Errorf("op-only incremental entry should exist with ops_match_category:\n%s", content)
 	}
 }
 
@@ -539,6 +642,10 @@ func TestMarkdownReportSections(t *testing.T) {
 	}
 	if !strings.Contains(md, "Running Skiped") {
 		t.Error("markdown blacklist stats should include Running Skiped")
+	}
+	// 总体概览按拆分 sheet 名（模板 sheet）分组：Utils 行存在（mobile 用例，Classification=Core）
+	if !strings.Contains(md, "| Utils | 1 | 0 | 1 | 0 | 0 | 0.0% |") {
+		t.Errorf("markdown overview should group by template sheet name (Utils row):\n%s", md)
 	}
 }
 

@@ -5,10 +5,23 @@ package artifact
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"pytorch-cicd-analysis/internal/models"
 )
+
+// Case 单个用例（v2 by_file jsonl / v3 shard jsonl / test-reports shard_*_cases.json 共用）。
+type Case struct {
+	NodeID     string  `json:"nodeid"`
+	Status     string  `json:"status"`
+	Duration   float64 `json:"duration"`
+	ReturnCode int     `json:"returncode"`
+	Message    string  `json:"message"`
+	Command    string  `json:"command"`
+	File       string  `json:"file"`
+	CaseIdx    int     `json:"case_idx"`
+}
 
 // FileCasesResult 表示 JSONL 文件中的一行（一个测试文件的用例集合）。
 // 同时支持 v2（file_path, case_count）与 v3（test_file）两种格式。
@@ -16,16 +29,7 @@ type FileCasesResult struct {
 	FilePath  string `json:"file_path"`
 	TestFile  string `json:"test_file"`
 	CaseCount int    `json:"case_count"`
-	Cases     []struct {
-		NodeID     string  `json:"nodeid"`
-		Status     string  `json:"status"`
-		Duration   float64 `json:"duration"`
-		ReturnCode int     `json:"returncode"`
-		Message    string  `json:"message"`
-		Command    string  `json:"command"`
-		File       string  `json:"file"`
-		CaseIdx    int     `json:"case_idx"`
-	} `json:"cases"`
+	Cases     []Case `json:"cases"`
 }
 
 // ResolvedFilePath 返回文件路径（v2 file_path 优先，兜底 v3 test_file）。
@@ -34,6 +38,60 @@ func (f *FileCasesResult) ResolvedFilePath() string {
 		return f.FilePath
 	}
 	return f.TestFile
+}
+
+// ShardCasesFile 表示 test-reports-*.zip 内 shard_*_cases.json 的结构。
+type ShardCasesFile struct {
+	Shard     int    `json:"shard"`
+	ShardType string `json:"shard_type"`
+	Cases     []Case `json:"cases"`
+}
+
+// ParseShardCasesJSON 解析 shard_*_cases.json 的用例数组（对齐 Python load_cases
+// 读取 data/test-reports-*.zip 内 *_cases.json 的 cases 数组）。
+func ParseShardCasesJSON(data []byte) ([]*models.TestCase, error) {
+	var scf ShardCasesFile
+	if err := json.Unmarshal(data, &scf); err != nil {
+		return nil, err
+	}
+	cases := make([]*models.TestCase, 0, len(scf.Cases))
+	for _, c := range scf.Cases {
+		cases = append(cases, &models.TestCase{
+			NodeID: c.NodeID, FilePath: c.File, Status: c.Status,
+			ErrorMessage: c.Message, ErrorTraceback: c.Message,
+		})
+	}
+	return cases, nil
+}
+
+// ParseMDPlannedCounts 从 full_test.md 的「测试文件结果汇总」表解析每个文件的
+// 规划用例数（对齐 Python _parse_md_planned_counts：行 strip 后去首尾 | 再切分，
+// cells[0] 须以 test/ 开头，cells[2] 去千分位后取整数，重复文件累加，`\_` 反转义）。
+func ParseMDPlannedCounts(data []byte) map[string]int {
+	counts := map[string]int{}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.Trim(line, "|")
+		if line == "" {
+			continue
+		}
+		cells := strings.Split(line, "|")
+		if len(cells) < 3 {
+			continue
+		}
+		first := strings.TrimSpace(cells[0])
+		if !strings.HasPrefix(first, "test/") {
+			continue
+		}
+		filePath := strings.ReplaceAll(first, "\\_", "_")
+		numStr := strings.ReplaceAll(strings.TrimSpace(cells[2]), ",", "")
+		n, err := strconv.Atoi(numStr)
+		if err != nil {
+			continue
+		}
+		counts[filePath] += n
+	}
+	return counts
 }
 
 // skipped_cases.json 结构。

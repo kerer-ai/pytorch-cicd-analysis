@@ -14,10 +14,12 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
+	"pytorch-cicd-analysis/internal/artifact"
 	"pytorch-cicd-analysis/internal/models"
 )
 
-// TestParityWithPythonReference 与 /tmp/20260827 Python 流水线的确定性参考产物
+// TestParityWithPythonReference 与 /tmp/20260909 Python 流水线（已修复合并单元格
+// 回读 bug：fill_ab/parse_blacklist 的 all_files 读取改 carry-over）的确定性参考产物
 // out_parity 全量内容比对：MD 逐字节、黑名单 JSON 解析态键序键值、
 // xlsx sheet 名/单元格值矩阵/合并区域。参考目录可用 PARITY_REF_DIR 覆盖。
 // 全量生成 + 双边读回耗时 20-30s，-short 模式跳过。
@@ -27,7 +29,7 @@ func TestParityWithPythonReference(t *testing.T) {
 	}
 	refDir := os.Getenv("PARITY_REF_DIR")
 	if refDir == "" {
-		refDir = "/tmp/20260827"
+		refDir = "/tmp/20260909"
 	}
 	outDir := filepath.Join(refDir, "out_parity")
 	if _, err := os.Stat(outDir); err != nil {
@@ -38,7 +40,7 @@ func TestParityWithPythonReference(t *testing.T) {
 		t.Skip("conf/ template files not found")
 	}
 
-	in := loadParityInput(t, filepath.Join(refDir, "data"))
+	in := loadParityInput(t, refDir)
 	workDir := t.TempDir()
 	result, err := GenerateReports(in, workDir, os.DirFS(confDir))
 	if err != nil {
@@ -84,12 +86,14 @@ func TestParityWithPythonReference(t *testing.T) {
 	}
 }
 
-// loadParityInput 从参考 data 目录解析输入（对齐 Python 数据源与顺序）：
-// cases 来自 test-reports-*.zip（文件名字母序）的 *_cases.json 数组序；
+// loadParityInput 从参考目录解析输入（对齐 Python 数据源与顺序）：
+// cases 来自 data/test-reports-*.zip（文件名字母序）的 *_cases.json 数组序；
 // fileResults 来自 npu zip 的 *_by_file.jsonl（file_path + case_count）；
-// skipped 来自 npu zip 的 skipped_cases.json 数组序。
-func loadParityInput(t *testing.T, dataDir string) Input {
+// skipped 来自 npu zip 的 skipped_cases.json 数组序；
+// precollect 来自 conf/cpu_full_test.md、conf/npu_full_test.md。
+func loadParityInput(t *testing.T, refDir string) Input {
 	t.Helper()
+	dataDir := filepath.Join(refDir, "data")
 	entries, err := os.ReadDir(dataDir)
 	if err != nil {
 		t.Fatalf("read data dir: %v", err)
@@ -114,6 +118,12 @@ func loadParityInput(t *testing.T, dataDir string) Input {
 	if len(in.Cases) == 0 || len(in.FileResults) == 0 || len(in.Skipped) == 0 {
 		t.Fatalf("incomplete parity input: cases=%d fileResults=%d skipped=%d",
 			len(in.Cases), len(in.FileResults), len(in.Skipped))
+	}
+	if data, err := os.ReadFile(filepath.Join(refDir, "conf", "cpu_full_test.md")); err == nil {
+		in.CPUPrecollect = artifact.ParseMDPlannedCounts(data)
+	}
+	if data, err := os.ReadFile(filepath.Join(refDir, "conf", "npu_full_test.md")); err == nil {
+		in.NPUPrecollect = artifact.ParseMDPlannedCounts(data)
 	}
 	return in
 }

@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"pytorch-cicd-analysis/internal/models"
 )
 
 // FileMap 是 File → (Classification, Specialization) 映射，
@@ -117,4 +119,55 @@ func classifyFile(fm FileMap, path string) FileClass {
 		return fc
 	}
 	return FileClass{Classification: "Other", Specialization: "Other"}
+}
+
+// BuildSheetMap 从 summary 模板构建 File → sheet 名映射（跳过 README/README(Bak)，
+// 与 BuildFileMap 同源的行遍历语义）。
+func BuildSheetMap(tmpl *SummaryTemplate) map[string]string {
+	sm := map[string]string{}
+	if tmpl == nil {
+		return sm
+	}
+	for _, entry := range tmpl.Sheets {
+		if entry.Name == "README" || entry.Name == "README(Bak)" {
+			continue
+		}
+		for ref, cell := range entry.Sheet.Cells {
+			col, row := splitCellRef(ref)
+			if col == "C" && row >= 2 {
+				if s, _ := cell.Value.(string); s != "" {
+					sm[s] = entry.Name
+				}
+			}
+		}
+	}
+	return sm
+}
+
+// EffectiveMaps 构建有效分类映射，对齐 /tmp/20260909 Python 从 all_files sheet
+// 回读分类的语义（fill_ab_from_summary / generate_matched_blacklist）：
+// 仅 FileResults（= all_files 行，即 npu summary zip 的 by_file 文件集）中的文件
+// 享有模板分类，其余文件落 Other；sheet 映射同理。
+func EffectiveMaps(tmpl *SummaryTemplate, fileResults []*models.TestFileResult) (FileMap, map[string]string) {
+	templateMap := BuildFileMap(tmpl)
+	sheetMap := BuildSheetMap(tmpl)
+
+	fileSet := map[string]bool{}
+	for _, fr := range fileResults {
+		if fr.FilePath != "" {
+			fileSet[fr.FilePath] = true
+		}
+	}
+
+	effFile := FileMap{}
+	effSheet := map[string]string{}
+	for fp := range fileSet {
+		effFile[fp] = classifyFile(templateMap, fp)
+		if sheet, ok := sheetMap[fp]; ok {
+			effSheet[fp] = sheet
+		} else {
+			effSheet[fp] = "Other"
+		}
+	}
+	return effFile, effSheet
 }
