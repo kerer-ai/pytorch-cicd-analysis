@@ -27,9 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      # 查找北京时间今天 00:00-10:00 内最新执行完成（success）的 nightly run；
+      # 查询近 24 小时内最近一次执行成功（success）的 nightly run；
       # workflow_dispatch 指定 run_id 时跳过发现，直接使用
-      - name: Find latest completed nightly run (Beijing 00:00-10:00)
+      - name: Find latest successful nightly run (last 24h)
         id: find-run
         env:
           GH_TOKEN: ${{ github.token }}
@@ -42,15 +42,13 @@ jobs:
             echo "- run: manually specified [$INPUT_RUN_ID](https://github.com/$UPSTREAM_REPO/actions/runs/$INPUT_RUN_ID) (window filter bypassed)" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          BJ_TODAY=$(TZ=Asia/Shanghai date '+%Y-%m-%d')
-          SINCE_UTC=$(date -u -d "${BJ_TODAY}T00:00:00+08:00" '+%Y-%m-%dT%H:%M:%SZ')
-          UNTIL_UTC=$(date -u -d "${BJ_TODAY}T10:00:00+08:00" '+%Y-%m-%dT%H:%M:%SZ')
-          export SINCE_UTC UNTIL_UTC
+          SINCE_UTC=$(date -u -d '24 hours ago' '+%Y-%m-%dT%H:%M:%SZ')
+          export SINCE_UTC
           RUN=$(gh api "repos/$UPSTREAM_REPO/actions/workflows/$UPSTREAM_WORKFLOW/runs?per_page=50" \
-            --jq '[.workflow_runs[] | select(.status=="completed" and .conclusion=="success" and .updated_at >= env.SINCE_UTC and .updated_at <= env.UNTIL_UTC)] | sort_by(.updated_at) | last // empty')
+            --jq '[.workflow_runs[] | select(.status=="completed" and .conclusion=="success" and .updated_at >= env.SINCE_UTC)] | sort_by(.updated_at) | last // empty')
           if [ -z "$RUN" ]; then
             echo "## Skipped" >> "$GITHUB_STEP_SUMMARY"
-            echo "No completed success nightly run in Beijing window [${SINCE_UTC} .. ${UNTIL_UTC}] (= Beijing today 00:00-10:00)." >> "$GITHUB_STEP_SUMMARY"
+            echo "No successful nightly run in the last 24 hours (since ${SINCE_UTC})." >> "$GITHUB_STEP_SUMMARY"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
