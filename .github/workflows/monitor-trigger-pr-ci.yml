@@ -21,7 +21,9 @@ name: Monitor Trigger PR CI
 
 on:
   schedule:
-    - cron: '0 * * * *' # hourly
+    # hourly, at minute 17: GitHub drops/delays scheduled runs under load and
+    # minute 0 is the most contended (observed: 5 of 6 hourly ticks dropped)
+    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       window_hours:
