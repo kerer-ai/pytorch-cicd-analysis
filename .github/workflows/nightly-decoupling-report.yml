@@ -44,9 +44,9 @@ jobs:
           fi
           SINCE_UTC=$(TZ=Asia/Shanghai date -d 'today 00:00' -u '+%Y-%m-%dT%H:%M:%SZ')
           UNTIL_UTC=$(TZ=Asia/Shanghai date -d 'today 10:00' -u '+%Y-%m-%dT%H:%M:%SZ')
+          export SINCE_UTC UNTIL_UTC
           RUN=$(gh api "repos/$UPSTREAM_REPO/actions/workflows/$UPSTREAM_WORKFLOW/runs?per_page=50" \
-            --arg since "$SINCE_UTC" --arg until "$UNTIL_UTC" \
-            --jq '[.workflow_runs[] | select(.status=="completed" and .conclusion=="success" and .updated_at >= $since and .updated_at <= $until)] | sort_by(.updated_at) | last // empty')
+            --jq '[.workflow_runs[] | select(.status=="completed" and .conclusion=="success" and .updated_at >= env.SINCE_UTC and .updated_at <= env.UNTIL_UTC)] | sort_by(.updated_at) | last // empty')
           if [ -z "$RUN" ]; then
             echo "## Skipped" >> "$GITHUB_STEP_SUMMARY"
             echo "No completed success nightly run in Beijing window [${SINCE_UTC} .. ${UNTIL_UTC}] (= Beijing today 00:00-10:00)." >> "$GITHUB_STEP_SUMMARY"
