@@ -1,0 +1,68 @@
+name: Monitor Trigger PR CI
+
+# Hourly monitor for Ascend/pytorch pytorch_ci_trigger_pr.yml ("PyTorch CI
+# Trigger PR"). Most of its runs are ~15s event-filter skips; only runs that
+# actually execute build/test jobs ("valid CI") are counted here.
+#
+#   window:    failures COMPLETED within [this run's start - 2h, now]
+#   threshold: >= 3 valid CI failures -> disable the upstream workflow, then
+#              fail this monitoring run ON PURPOSE so GitHub's built-in
+#              scheduled-workflow failure email notifies the repo owner.
+#
+# Notification semantics (all via the built-in failure email, no SMTP):
+#   - upstream already disabled (incl. after a trip)  -> gate exits 0, silent
+#   - active + below threshold                        -> success, silent
+#   - active + threshold met (disable succeeds/fails) -> exit 1, email
+#     (while it stays enabled, every hourly run retries + re-notifies)
+#   - any real monitoring error (API/script)          -> exit 1, email
+#
+# After a trip, re-enable manually once the window has drained (<= 2h):
+#   gh api -X PUT repos/Ascend/pytorch/actions/workflows/pytorch_ci_trigger_pr.yml/enable
+
+on:
+  schedule:
+    - cron: '0 * * * *' # hourly
+  workflow_dispatch:
+    inputs:
+      window_hours:
+        description: 'Lookback window in hours (anchored at this run start)'
+        required: false
+        default: '2'
+        type: string
+      failure_threshold:
+        description: 'Valid-CI failure count that trips the breaker'
+        required: false
+        default: '3'
+        type: string
+
+permissions:
+  contents: read # checkout
+  actions: read # read this run's start time + upstream runs/jobs
+
+concurrency:
+  group: monitor-trigger-pr-ci
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: Ascend/pytorch
+  TARGET_WORKFLOW: pytorch_ci_trigger_pr.yml
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Monitor and trip breaker if needed
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+          GH_WRITE_TOKEN: ${{ secrets.ASCEND_PAT }}
+          WINDOW_HOURS: ${{ inputs.window_hours || '2' }}
+          FAILURE_THRESHOLD: ${{ inputs.failure_threshold || '3' }}
+        run: |
+          set -euo pipefail
+          bash scripts/monitor_trigger_pr_ci.sh \
+            --window-hours "$WINDOW_HOURS" \
+            --threshold "$FAILURE_THRESHOLD"
