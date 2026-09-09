@@ -42,8 +42,9 @@ jobs:
             echo "- run: manually specified [$INPUT_RUN_ID](https://github.com/$UPSTREAM_REPO/actions/runs/$INPUT_RUN_ID) (window filter bypassed)" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          SINCE_UTC=$(TZ=Asia/Shanghai date -d 'today 00:00' -u '+%Y-%m-%dT%H:%M:%SZ')
-          UNTIL_UTC=$(TZ=Asia/Shanghai date -d 'today 10:00' -u '+%Y-%m-%dT%H:%M:%SZ')
+          BJ_TODAY=$(TZ=Asia/Shanghai date '+%Y-%m-%d')
+          SINCE_UTC=$(date -u -d "${BJ_TODAY}T00:00:00+08:00" '+%Y-%m-%dT%H:%M:%SZ')
+          UNTIL_UTC=$(date -u -d "${BJ_TODAY}T10:00:00+08:00" '+%Y-%m-%dT%H:%M:%SZ')
           export SINCE_UTC UNTIL_UTC
           RUN=$(gh api "repos/$UPSTREAM_REPO/actions/workflows/$UPSTREAM_WORKFLOW/runs?per_page=50" \
             --jq '[.workflow_runs[] | select(.status=="completed" and .conclusion=="success" and .updated_at >= env.SINCE_UTC and .updated_at <= env.UNTIL_UTC)] | sort_by(.updated_at) | last // empty')
