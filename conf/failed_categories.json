@@ -11,8 +11,14 @@
 
   "categories": [
     {
+      "name": "PTA调用acl api失败",
+      "rules": [
+        {"keyword": "PTA call acl api failed"}
+      ]
+    },
+    {
       "name": "dtype不支持",
-      "exclude_keywords": ["ERR00100", "PTA call acl api failed"],
+      "exclude_keywords": ["ERR00100"],
       "rules": [
         {"regex": "input dtype or format is not supported, get io input info is \\S+"},
         {"regex": "only supported \\w+, but get\\w+"},
@@ -84,7 +90,6 @@
       "name": "common",
       "rules": [
         {"keyword": "ERR00100"},
-        {"keyword": "PTA call acl api failed"},
         {"keyword": "AclrtSynchronizeStreamWithTimeout"},
         {"regex": "call aclnn\\w+ failed, error code is \\d+"},
         {"regex": "call aclnn\\w+ failed"},
@@ -101,7 +106,6 @@
       "subcategories": [
         {"name": "Backend选择错误", "keywords_all": ["object comparison failed", "backend"]},
         {"name": "ACL流同步失败", "keyword": "acl stream synchronize failed"},
-        {"name": "PTA调用acl api失败", "keywords_any": ["ERR00100", "PTA call acl api failed", "AclrtSynchronizeStreamWithTimeout"]},
         {"name": "aclnn调用失败", "keywords_any": ["call aclnn", "Inner error is reported as above"]},
         {"name": "INTERNAL_ASSERT", "keyword": "internal assert failed"},
         {"name": "dtype不支持", "keyword": "has not been supported"},
