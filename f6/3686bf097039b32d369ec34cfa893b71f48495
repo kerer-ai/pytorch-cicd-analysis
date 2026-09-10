@@ -1,0 +1,33 @@
+conf/cpu_full_test.md
+  s_d75b83a2546a55::t_927d0491b9f05c 1-1146
+conf/npu_full_test.md
+  s_d75b83a2546a55::t_927d0491b9f05c 1-934
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "f63686bf097039b32d369ec34cfa893b71f48495",
+  "prompts": {},
+  "sessions": {
+    "s_d75b83a2546a55": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6aa273290c3f150b331e7c60",
+        "model": "deepseek-V4-Pro__dev"
+      },
+      "human_author": "y30037164 <yuaiming@h-partners.com>",
+      "custom_attributes": {
+        "operation_id": "6aa2760d0c3f150b331e7e59",
+        "tool_name": "RunCommand",
+        "session_id": "6aa273290c3f150b331e7c60",
+        "edit_kind": "bash",
+        "tool_use_id": "6aa2760d0c3f150b331e7e59",
+        "source_scene": "agent",
+        "display_model_name": "DeepSeek-V4-Pro",
+        "external_session_id": "6aa273290c3f150b331e7c60",
+        "client_type": "ide",
+        "runtime_client": "trae-tob-git-ai"
+      }
+    }
+  }
+}
