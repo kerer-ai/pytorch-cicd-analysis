@@ -1,0 +1,35 @@
+conf/failed_categories.json
+  s_d75b83a2546a55::t_0ba1342b9ab35b 14-18,21
+  s_d75b83a2546a55::t_8755bc96742856 13
+cmd/reportgen/main.go
+  s_d75b83a2546a55::t_b63cbde158f8e1 39-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "6ca1c0951ff82428434502ca548413eaa66fcd86",
+  "prompts": {},
+  "sessions": {
+    "s_d75b83a2546a55": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6aa273290c3f150b331e7c60",
+        "model": "deepseek-V4-Pro__dev"
+      },
+      "human_author": "y30037164 <yuaiming@h-partners.com>",
+      "custom_attributes": {
+        "client_type": "ide",
+        "external_session_id": "6aa273290c3f150b331e7c60",
+        "tool_id": "Edit",
+        "tool_type": "agent",
+        "operation_id": "6aa2a68996188bd2d5860831",
+        "edit_kind": "file_edit",
+        "runtime_client": "trae-tob-git-ai",
+        "dedupe_key": "6aa273290c3f150b331e7c60:6aa2a68996188bd2d5860831:afterEdit:150633c2",
+        "source_scene": "unknown",
+        "session_id": "6aa273290c3f150b331e7c60",
+        "tool_use_id": "6aa2a68996188bd2d5860831"
+      }
+    }
+  }
+}
