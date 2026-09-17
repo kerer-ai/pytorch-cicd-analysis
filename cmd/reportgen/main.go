@@ -11,8 +11,8 @@
 //       - test_file_results  UNIQUE(run_id,file_path,test_type) DO UPDATE → 后到覆盖
 //       - skipped_cases  ParseSkippedCases 首现去重序 = ORDER BY id ASC
 //
-// 可选输入：-cpu-md/-npu-md 指向 full_test.md（文件级规划用例数，填充 all_files 的
-// CPU预收集/NPU预收集列，对齐 Python conf/cpu_full_test.md、conf/npu_full_test.md）。
+// 可选输入：-comparison-md 指向 cpu_npu_case_comparison_summary.md
+// （文件级预收集对比数，填充 all_files 的预收集-公共用例/预收集-仅CPU/预收集-仅NPU列）。
 package main
 
 import (
@@ -33,17 +33,16 @@ import (
 
 func main() {
 	var (
-		runID        = flag.Int64("run-id", 0, "GitHub Actions run ID (required)")
-		zipPath      = flag.String("artifact", "", "path to npu-full-test-summary artifact zip (required)")
-		testReports  = flag.String("test-reports", "", "directory containing test-reports-*.zip (case details)")
-		cpuMD        = flag.String("cpu-md", "conf/cpu_full_test.md", "path to cpu full test summary md (CPU precollect source)")
-		npuMD        = flag.String("npu-md", "conf/npu_full_test.md", "path to npu full test summary md (NPU precollect source)")
-		outDir       = flag.String("out", "out", "output directory")
+		runID          = flag.Int64("run-id", 0, "GitHub Actions run ID (required)")
+		zipPath        = flag.String("artifact", "", "path to npu-full-test-summary artifact zip (required)")
+		testReports    = flag.String("test-reports", "", "directory containing test-reports-*.zip (case details)")
+		comparisonMD   = flag.String("comparison-md", "conf/cpu_npu_case_comparison_summary.md", "path to cpu_npu_case_comparison_summary.md (precollect source)")
+		outDir         = flag.String("out", "out", "output directory")
 	)
 	flag.Parse()
 
 	if *runID <= 0 || *zipPath == "" {
-		fmt.Fprintln(os.Stderr, "usage: reportgen -run-id <id> -artifact <npu-full-test-summary.zip> [-test-reports dir] [-cpu-md md] [-npu-md md] [-out dir]")
+		fmt.Fprintln(os.Stderr, "usage: reportgen -run-id <id> -artifact <npu-full-test-summary.zip> [-test-reports dir] [-comparison-md md] [-out dir]")
 		os.Exit(2)
 	}
 
@@ -57,7 +56,7 @@ func main() {
 		fatal(fmt.Errorf("unzip artifact: %w", err))
 	}
 
-	in, err := buildInput(*runID, extractDir, *testReports, *cpuMD, *npuMD)
+	in, err := buildInput(*runID, extractDir, *testReports, *comparisonMD)
 	if err != nil {
 		fatal(err)
 	}
@@ -79,8 +78,8 @@ func fatal(err error) {
 // buildInput 从解压目录构建报告输入。
 // 用例明细：testReportsDir 非空时取 test-reports-*.zip（新式，对齐 Python load_cases，
 // 文件名字母序、无 nodeid 去重）；否则取 artifact zip 的 JSONL（旧式 DB 语义）。
-// FileResults/skipped 始终来自 artifact zip；precollect 来自 md 文件。
-func buildInput(runID int64, extractDir, testReportsDir, cpuMDPath, npuMDPath string) (*report.Input, error) {
+// FileResults/skipped 始终来自 artifact zip；precollect 来自 comparison md 文件。
+func buildInput(runID int64, extractDir, testReportsDir, comparisonMDPath string) (*report.Input, error) {
 	// FileResults：artifact zip 的 by_file jsonl（v2）/ shard jsonl（v3），(file,type) 后到覆盖
 	fileResults, err := loadFileResults(extractDir)
 	if err != nil {
@@ -113,25 +112,19 @@ func buildInput(runID int64, extractDir, testReportsDir, cpuMDPath, npuMDPath st
 		}
 	}
 
-	var cpuPre, npuPre map[string]int
-	if data, err := os.ReadFile(cpuMDPath); err == nil {
-		cpuPre = artifact.ParseMDPlannedCounts(data)
-	} else if cpuMDPath != "" {
-		return nil, fmt.Errorf("read cpu md: %w", err)
-	}
-	if data, err := os.ReadFile(npuMDPath); err == nil {
-		npuPre = artifact.ParseMDPlannedCounts(data)
-	} else if npuMDPath != "" {
-		return nil, fmt.Errorf("read npu md: %w", err)
+	var comparisonPrecollect map[string]models.FileComparisonCounts
+	if data, err := os.ReadFile(comparisonMDPath); err == nil {
+		comparisonPrecollect = artifact.ParseComparisonMD(data)
+	} else if comparisonMDPath != "" {
+		return nil, fmt.Errorf("read comparison md: %w", err)
 	}
 
 	return &report.Input{
-		RunID:         runID,
-		Cases:         ordered,
-		FileResults:   fileResults,
-		Skipped:       skippedCases,
-		CPUPrecollect: cpuPre,
-		NPUPrecollect: npuPre,
+		RunID:                runID,
+		Cases:                ordered,
+		FileResults:          fileResults,
+		Skipped:              skippedCases,
+		ComparisonPrecollect: comparisonPrecollect,
 	}, nil
 }
 

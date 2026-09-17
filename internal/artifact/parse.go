@@ -94,6 +94,37 @@ func ParseMDPlannedCounts(data []byte) map[string]int {
 	return counts
 }
 
+// ParseComparisonMD 从 cpu_npu_case_comparison_summary.md 的「测试文件用例规划对比」表
+// 解析每个文件的预收集对比数（公共用例/仅CPU/仅NPU），对齐 ParseMDPlannedCounts 解析规则。
+func ParseComparisonMD(data []byte) map[string]models.FileComparisonCounts {
+	counts := map[string]models.FileComparisonCounts{}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.Trim(line, "|")
+		if line == "" {
+			continue
+		}
+		cells := strings.Split(line, "|")
+		if len(cells) < 7 {
+			continue
+		}
+		first := strings.TrimSpace(cells[0])
+		if !strings.HasPrefix(first, "test/") {
+			continue
+		}
+		filePath := strings.ReplaceAll(first, "\\_", "_")
+		shared, _ := strconv.Atoi(strings.ReplaceAll(strings.TrimSpace(cells[4]), ",", ""))
+		cpuOnly, _ := strconv.Atoi(strings.ReplaceAll(strings.TrimSpace(cells[5]), ",", ""))
+		npuOnly, _ := strconv.Atoi(strings.ReplaceAll(strings.TrimSpace(cells[6]), ",", ""))
+		entry := counts[filePath]
+		entry.Shared += shared
+		entry.CPUOnly += cpuOnly
+		entry.NPUOnly += npuOnly
+		counts[filePath] = entry
+	}
+	return counts
+}
+
 // skipped_cases.json 结构。
 type SkippedCasesFile struct {
 	TotalSkipped int              `json:"total_skipped"`

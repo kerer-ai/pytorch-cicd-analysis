@@ -90,7 +90,7 @@ func TestParityWithPythonReference(t *testing.T) {
 // cases 来自 data/test-reports-*.zip（文件名字母序）的 *_cases.json 数组序；
 // fileResults 来自 npu zip 的 *_by_file.jsonl（file_path + case_count）；
 // skipped 来自 npu zip 的 skipped_cases.json 数组序；
-// precollect 来自 conf/cpu_full_test.md、conf/npu_full_test.md。
+// precollect 来自 conf/cpu_npu_case_comparison_summary.md。
 func loadParityInput(t *testing.T, refDir string) Input {
 	t.Helper()
 	dataDir := filepath.Join(refDir, "data")
@@ -119,11 +119,8 @@ func loadParityInput(t *testing.T, refDir string) Input {
 		t.Fatalf("incomplete parity input: cases=%d fileResults=%d skipped=%d",
 			len(in.Cases), len(in.FileResults), len(in.Skipped))
 	}
-	if data, err := os.ReadFile(filepath.Join(refDir, "conf", "cpu_full_test.md")); err == nil {
-		in.CPUPrecollect = artifact.ParseMDPlannedCounts(data)
-	}
-	if data, err := os.ReadFile(filepath.Join(refDir, "conf", "npu_full_test.md")); err == nil {
-		in.NPUPrecollect = artifact.ParseMDPlannedCounts(data)
+	if data, err := os.ReadFile(filepath.Join(refDir, "conf", "cpu_npu_case_comparison_summary.md")); err == nil {
+		in.ComparisonPrecollect = artifact.ParseComparisonMD(data)
 	}
 	return in
 }
