@@ -68,9 +68,13 @@ func testInput() Input {
 			{RunID: 123, FilePath: "test/mobile/test_mobile.py", TestType: "others", TotalCases: 1},
 			{RunID: 123, FilePath: "test/zero_cases.py", TestType: "core", TotalCases: 0},
 		},
-		ComparisonPrecollect: map[string]models.FileComparisonCounts{
-			"test/nn/test_dropout.py":    {Shared: 2, CPUOnly: 3, NPUOnly: 0},
-			"test/nn/test_batchnorm.py":  {Shared: 1, CPUOnly: 2, NPUOnly: 0},
+		ComparisonPrecollectA3: map[string]models.FileComparisonCounts{
+			"test/nn/test_dropout.py":   {Shared: 2, CPUOnly: 3, NPUOnly: 0},
+			"test/nn/test_batchnorm.py": {Shared: 1, CPUOnly: 2, NPUOnly: 0},
+		},
+		ComparisonPrecollectA5: map[string]models.FileComparisonCounts{
+			"test/nn/test_dropout.py":   {Shared: 5, CPUOnly: 1, NPUOnly: 2},
+			"test/nn/test_batchnorm.py": {Shared: 0, CPUOnly: 4, NPUOnly: 1},
 		},
 		Skipped: []*models.SkippedCase{
 			{RunID: 123, NodeID: "test/nn/test_init.py::TestNNInit::test_orthogonal", FilePath: "test/nn/test_init.py", SkipReason: "PyTorch compiled without Lapack", SkipCategory: "", SkipSource: "running_skiped_testcases.json"},
@@ -256,8 +260,8 @@ func TestAllFilesSheetHierarchicalMerge(t *testing.T) {
 	}
 	defer f.Close()
 
-	// 8 列表头
-	wantHeader := []string{"sheet", "Classification", "Specialization", "File", "实际运行数量", "预收集-公共用例", "预收集-仅CPU", "预收集-仅NPU"}
+	// 11 列表头
+	wantHeader := []string{"sheet", "Classification", "Specialization", "File", "实际运行数量", "A3-公共用例", "A3-仅CPU", "A3-仅NPU", "A5-公共用例", "A5-仅CPU", "A5-仅NPU"}
 	for i, h := range wantHeader {
 		got, _ := f.GetCellValue("all_files", cellName(i, 1))
 		if got != h {
@@ -271,11 +275,11 @@ func TestAllFilesSheetHierarchicalMerge(t *testing.T) {
 		t.Fatalf("all_files should have 4 data rows, got %d", len(rows)-1)
 	}
 	wantRows := [][]string{
-		{"Core", "Core", "NN", "test/nn/test_batchnorm.py", "1", "1", "2", "0"},
+		{"Core", "Core", "NN", "test/nn/test_batchnorm.py", "1", "1", "2", "0", "0", "4", "1"},
 		// A/B/C 已被层级合并覆盖，GetRows 读回非锚点为空
-		{"", "", "", "test/nn/test_dropout.py", "2", "2", "3", "0"},
-		{"Other", "Other", "Other", "test/zero_cases.py", "0", "0", "0", "0"},
-		{"Utils", "Core", "Mobile", "test/mobile/test_mobile.py", "1", "0", "0", "0"},
+		{"", "", "", "test/nn/test_dropout.py", "2", "2", "3", "0", "5", "1", "2"},
+		{"Other", "Other", "Other", "test/zero_cases.py", "0", "0", "0", "0", "0", "0", "0"},
+		{"Utils", "Core", "Mobile", "test/mobile/test_mobile.py", "1", "0", "0", "0", "0", "0", "0"},
 	}
 	for r, want := range wantRows {
 		for c := 0; c < len(want); c++ {

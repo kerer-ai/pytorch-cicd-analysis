@@ -191,3 +191,49 @@ func ParseCasesJSONL(data []byte) ([]*FileCasesResult, error) {
 	}
 	return results, nil
 }
+
+// CollectionByFileLine 是采集制品 {分类}_cases_by_file.jsonl 的一行
+// （首行为汇总行）。cases 为 nodeid 字符串数组（采集阶段，无运行结果）。
+type CollectionByFileLine struct {
+	FilePath  string   `json:"file_path"`
+	CaseCount int      `json:"case_count"`
+	Cases     []string `json:"cases"`
+}
+
+// ParseCollectionByFile 解析采集阶段 {分类}_cases_by_file.jsonl：
+// 跳过首行汇总，逐行按 nodeid 后缀统计每文件的预收集对比数并累加进 out。
+// 判定规则（对齐 cpu_npu_case_comparison_summary.md 的公共/仅CPU/仅NPU）：
+//   - nodeid 以 "_cpu" 结尾 -> 仅CPU
+//   - nodeid 以 "_npu" 结尾 -> 仅NPU
+//   - 其余 -> 公共
+func ParseCollectionByFile(data []byte, out map[string]models.FileComparisonCounts) {
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if i == 0 {
+			continue // 汇总行 {"total_file":N,"total_cases":N}
+		}
+		var rec CollectionByFileLine
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			continue
+		}
+		if rec.FilePath == "" {
+			continue
+		}
+		c := out[rec.FilePath]
+		for _, nodeid := range rec.Cases {
+			switch {
+			case strings.HasSuffix(nodeid, "_cpu"):
+				c.CPUOnly++
+			case strings.HasSuffix(nodeid, "_npu"):
+				c.NPUOnly++
+			default:
+				c.Shared++
+			}
+		}
+		out[rec.FilePath] = c
+	}
+}

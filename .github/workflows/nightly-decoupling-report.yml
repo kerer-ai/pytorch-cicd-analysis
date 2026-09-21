@@ -21,6 +21,7 @@ concurrency:
 env:
   UPSTREAM_REPO: Ascend/pytorch
   UPSTREAM_WORKFLOW: nightly.yml
+  COLLECT_WORKFLOW: nightly-collect-only.yml
 
 jobs:
   report:
@@ -58,6 +59,37 @@ jobs:
           echo "- run: [#${RUN_ID}]($(echo "$RUN" | jq -r '.html_url'))" >> "$GITHUB_STEP_SUMMARY"
           echo "- completed at: $(echo "$RUN" | jq -r '.updated_at')" >> "$GITHUB_STEP_SUMMARY"
 
+      # 查询最近一次执行成功的 nightly-collect-only 采集 run：
+      # 优先 24h 内，没有则扩大到 7 天内；都没有时降级为静态 comparison md（只填 A3 列）
+      - name: Find latest successful collect run (24h → 7d)
+        id: find-collect-run
+        if: steps.find-run.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SINCE_24H=$(date -u -d '24 hours ago' '+%Y-%m-%dT%H:%M:%SZ')
+          SINCE_7D=$(date -u -d '7 days ago' '+%Y-%m-%dT%H:%M:%SZ')
+          export SINCE_24H SINCE_7D
+          RUN=$(gh api "repos/$UPSTREAM_REPO/actions/workflows/$COLLECT_WORKFLOW/runs?per_page=50" \
+            --jq '[.workflow_runs[] | select(.status=="completed" and .conclusion=="success" and .updated_at >= env.SINCE_24H)] | sort_by(.updated_at) | last // empty')
+          WINDOW="24h"
+          if [ -z "$RUN" ]; then
+            RUN=$(gh api "repos/$UPSTREAM_REPO/actions/workflows/$COLLECT_WORKFLOW/runs?per_page=50" \
+              --jq '[.workflow_runs[] | select(.status=="completed" and .conclusion=="success" and .updated_at >= env.SINCE_7D)] | sort_by(.updated_at) | last // empty')
+            WINDOW="7d"
+          fi
+          if [ -z "$RUN" ]; then
+            echo "collect_run_id=" >> "$GITHUB_OUTPUT"
+            echo "::warning::No successful collect run in the last 7 days; precollect falls back to static comparison md."
+            exit 0
+          fi
+          echo "collect_run_id=$(echo "$RUN" | jq -r '.id')" >> "$GITHUB_OUTPUT"
+          echo "### Upstream collect run" >> "$GITHUB_STEP_SUMMARY"
+          echo "- window: $WINDOW (24h first, then 7d)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- run: [#$(echo "$RUN" | jq -r '.id')]($(echo "$RUN" | jq -r '.html_url'))" >> "$GITHUB_STEP_SUMMARY"
+          echo "- completed at: $(echo "$RUN" | jq -r '.updated_at')" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout
         if: steps.find-run.outputs.skip != 'true'
         uses: actions/checkout@v4
@@ -84,6 +116,27 @@ jobs:
           gh api "repos/$UPSTREAM_REPO/actions/artifacts/$AID/zip" > npu-full-test-summary.zip
           ls -lh npu-full-test-summary.zip
 
+      - name: Download collection artifacts (cases-shards / cases-shards-a5)
+        if: steps.find-run.outputs.skip != 'true' && steps.find-collect-run.outputs.collect_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COLLECT_RUN_ID: ${{ steps.find-collect-run.outputs.collect_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p collection
+          gh api "repos/$UPSTREAM_REPO/actions/runs/$COLLECT_RUN_ID/artifacts" > artifacts.json
+          for NAME in cases-shards cases-shards-a5; do
+            AID=$(jq -r --arg n "$NAME" '.artifacts[] | select(.name == $n) | .id' artifacts.json | head -1)
+            if [ -z "$AID" ]; then
+              echo "::warning::$NAME artifact not found for collect run $COLLECT_RUN_ID"
+              continue
+            fi
+            gh api "repos/$UPSTREAM_REPO/actions/artifacts/$AID/zip" > "collection/$NAME.zip"
+            mkdir -p "collection/$NAME"
+            unzip -q -o "collection/$NAME.zip" -d "collection/$NAME"
+            echo "- $NAME: $(ls "collection/$NAME" | wc -l) files" >> "$GITHUB_STEP_SUMMARY"
+          done
+
       - name: Generate decoupling report
         if: steps.find-run.outputs.skip != 'true'
         env:
@@ -91,7 +144,10 @@ jobs:
         run: |
           set -euo pipefail
           go build -o reportgen ./cmd/reportgen
-          ./reportgen -run-id "$RUN_ID" -artifact npu-full-test-summary.zip -out out | tee reportgen.log
+          ARGS=()
+          if [ -d collection/cases-shards ]; then ARGS+=(-collect-a3 collection/cases-shards); fi
+          if [ -d collection/cases-shards-a5 ]; then ARGS+=(-collect-a5 collection/cases-shards-a5); fi
+          ./reportgen -run-id "$RUN_ID" -artifact npu-full-test-summary.zip -out out "${ARGS[@]}" | tee reportgen.log
           {
             echo "### Report stats"
             echo '```'

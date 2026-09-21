@@ -64,7 +64,7 @@ func TestBuildInputOrderingAndConflicts(t *testing.T) {
 		t.Fatalf("unzipAll: %v", err)
 	}
 
-	in, err := buildInput(123, extractDir, "", "")
+	in, err := buildInput(123, extractDir, "", "", "", "")
 	if err != nil {
 		t.Fatalf("buildInput: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestGenerateReportsEndToEnd(t *testing.T) {
 	if err := unzipAll(zipPath, extractDir); err != nil {
 		t.Fatalf("unzipAll: %v", err)
 	}
-	in, err := buildInput(123, extractDir, "", "")
+	in, err := buildInput(123, extractDir, "", "", "", "")
 	if err != nil {
 		t.Fatalf("buildInput: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestGenerateReportsEndToEnd(t *testing.T) {
 
 func TestBuildInputNoJSONL(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := buildInput(1, dir, "", ""); err == nil {
+	if _, err := buildInput(1, dir, "", "", "", ""); err == nil {
 		t.Fatal("expected error for empty dir")
 	}
 }
@@ -198,7 +198,7 @@ func TestBuildInputTestReportsPath(t *testing.T) {
 	comparisonMD := filepath.Join(dir, "cpu_npu_case_comparison_summary.md")
 	os.WriteFile(comparisonMD, []byte("| 测试文件 | 分类 | CPU用例 | NPU用例 | 公共用例 | 仅CPU | 仅NPU |\n| --- | --- | --- | --- | --- | --- | --- |\n| test/test_a.py | core | 12 | 10 | 8 | 4 | 2 |\n"), 0644)
 
-	in, err := buildInput(7, extractDir, trDir, comparisonMD)
+	in, err := buildInput(7, extractDir, trDir, comparisonMD, "", "")
 	if err != nil {
 		t.Fatalf("buildInput: %v", err)
 	}
@@ -225,8 +225,8 @@ func TestBuildInputTestReportsPath(t *testing.T) {
 		t.Fatalf("skipped = %d, want 2", len(in.Skipped))
 	}
 
-	comp := in.ComparisonPrecollect["test/test_a.py"]
+	comp := in.ComparisonPrecollectA3["test/test_a.py"]
 	if comp.Shared != 8 || comp.CPUOnly != 4 || comp.NPUOnly != 2 {
-		t.Errorf("ComparisonPrecollect[test/test_a.py] = %+v, want {Shared:8 CPUOnly:4 NPUOnly:2}", comp)
+		t.Errorf("ComparisonPrecollectA3[test/test_a.py] = %+v, want {Shared:8 CPUOnly:4 NPUOnly:2}", comp)
 	}
 }

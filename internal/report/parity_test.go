@@ -120,7 +120,7 @@ func loadParityInput(t *testing.T, refDir string) Input {
 			len(in.Cases), len(in.FileResults), len(in.Skipped))
 	}
 	if data, err := os.ReadFile(filepath.Join(refDir, "conf", "cpu_npu_case_comparison_summary.md")); err == nil {
-		in.ComparisonPrecollect = artifact.ParseComparisonMD(data)
+		in.ComparisonPrecollectA3 = artifact.ParseComparisonMD(data)
 	}
 	return in
 }
