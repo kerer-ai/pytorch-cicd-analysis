@@ -201,11 +201,11 @@ type CollectionByFileLine struct {
 }
 
 // ParseCollectionByFile 解析采集阶段 {分类}_cases_by_file.jsonl：
-// 跳过首行汇总，逐行按 nodeid 后缀统计每文件的预收集对比数并累加进 out。
-// 判定规则（对齐 cpu_npu_case_comparison_summary.md 的公共/仅CPU/仅NPU）：
-//   - nodeid 以 "_cpu" 结尾 -> 仅CPU
-//   - nodeid 以 "_npu" 结尾 -> 仅NPU
-//   - 其余 -> 公共
+// 跳过首行汇总，逐行按 nodeid 里测试类名的后缀统计每文件的预收集对比数并累加进 out。
+// 判定规则（类名 = nodeid 中 `::` 分隔的倒数第二段，如 file::TestFooCPU::test_m 的类名为 TestFooCPU）：
+//   - 类名以 "CPU" 结尾 -> 仅CPU
+//   - 类名以 "NPU" 或 "PRIVATEUSE1" 结尾 -> 仅NPU
+//   - 其余（含无类名） -> 公共
 func ParseCollectionByFile(data []byte, out map[string]models.FileComparisonCounts) {
 	lines := strings.Split(string(data), "\n")
 	for i, line := range lines {
@@ -225,10 +225,10 @@ func ParseCollectionByFile(data []byte, out map[string]models.FileComparisonCoun
 		}
 		c := out[rec.FilePath]
 		for _, nodeid := range rec.Cases {
-			switch {
-			case strings.HasSuffix(nodeid, "_cpu"):
+			switch cls := nodeClassOf(nodeid); {
+			case strings.HasSuffix(cls, "CPU"):
 				c.CPUOnly++
-			case strings.HasSuffix(nodeid, "_npu"):
+			case strings.HasSuffix(cls, "NPU"), strings.HasSuffix(cls, "PRIVATEUSE1"):
 				c.NPUOnly++
 			default:
 				c.Shared++
@@ -236,4 +236,14 @@ func ParseCollectionByFile(data []byte, out map[string]models.FileComparisonCoun
 		}
 		out[rec.FilePath] = c
 	}
+}
+
+// nodeClassOf 返回 nodeid 里测试类名（`::` 分隔的倒数第二段），
+// 如 file::TestFooCPU::test_m -> TestFooCPU；无类名（file::test_m）返回空串。
+func nodeClassOf(nodeid string) string {
+	parts := strings.Split(nodeid, "::")
+	if len(parts) < 3 {
+		return ""
+	}
+	return parts[len(parts)-2]
 }

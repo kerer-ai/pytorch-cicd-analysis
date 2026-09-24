@@ -3,6 +3,8 @@ package artifact
 import (
 	"reflect"
 	"testing"
+
+	"pytorch-cicd-analysis/internal/models"
 )
 
 func TestParseMDPlannedCounts(t *testing.T) {
@@ -55,5 +57,17 @@ func TestParseShardCasesJSON(t *testing.T) {
 	}
 	if cases[1].Status != "skipped" || cases[1].ErrorMessage != "test is slow" {
 		t.Errorf("case[1] = %+v", cases[1])
+	}
+}
+
+func TestParseCollectionByFile(t *testing.T) {
+	data := []byte(`{"total_file":1,"total_cases":5}
+{"file_path":"test/test_a.py","case_count":5,"cases":["test/test_a.py::TestFooCPU::test_m1","test/test_a.py::TestFooNPU::test_m2","test/test_a.py::TestFooPRIVATEUSE1::test_m3","test/test_a.py::TestFooCommon::test_m4","test/test_a.py::test_m5"]}`)
+	out := map[string]models.FileComparisonCounts{}
+	ParseCollectionByFile(data, out)
+	got := out["test/test_a.py"]
+	want := models.FileComparisonCounts{Shared: 2, CPUOnly: 1, NPUOnly: 2}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ParseCollectionByFile = %+v, want %+v", got, want)
 	}
 }
