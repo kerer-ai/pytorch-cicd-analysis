@@ -1,0 +1,61 @@
+name: Trigger Ascend Nightly All & A5
+
+# Scheduled trigger for two Ascend/pytorch "full test" nightlies on ci-test:
+#   - nightly_all.yml  (Nightly Build and Test A3 (All))
+#   - nightly-a5.yml   (Nightly Build and Test A5 (All))
+# Both only exist on the ci-test branch and expose bare workflow_dispatch
+# (no inputs), so they are dispatched with --ref ci-test.
+#
+# Schedule: Tuesday & Thursday 18:00 Beijing = UTC 10:00. Minute is offset
+# from 0 because GitHub drops/delays minute-0 scheduled runs under load
+# (see monitor-trigger-pr-ci.yml); a dropped tick here means a missed
+# nightly, so trade 4 minutes for reliability.
+
+on:
+  schedule:
+    - cron: '4 10 * * 2,4' # UTC 10:04 Tue & Thu = Beijing 18:04
+  workflow_dispatch: # keep manual trigger for testing
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger Ascend/pytorch nightly_all & nightly-a5
+        env:
+          GH_TOKEN: ${{ secrets.ASCEND_PAT }}
+        run: |
+          set -euo pipefail
+          FAILURES=""
+          for wf in nightly_all.yml nightly-a5.yml; do
+            # Guard: skip if this upstream workflow is already running/queued
+            ACTIVE=$(gh run list --workflow="$wf" --repo Ascend/pytorch \
+              --status in_progress --json databaseId --jq 'length')
+            QUEUED=$(gh run list --workflow="$wf" --repo Ascend/pytorch \
+              --status queued --json databaseId --jq 'length')
+            if [ "$((ACTIVE + QUEUED))" -gt 0 ]; then
+              echo "### $wf: skipped (already active: ${ACTIVE} running, ${QUEUED} queued)" \
+                | tee -a "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            if gh workflow run "$wf" --repo Ascend/pytorch --ref ci-test; then
+              sleep 15 # let the dispatched run register before listing it
+              {
+                echo "### $wf: triggered"
+                gh run list --workflow="$wf" --repo Ascend/pytorch \
+                  --event workflow_dispatch -L 1 \
+                  --json url,createdAt,databaseId
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::error::failed to trigger $wf"
+              FAILURES="$FAILURES $wf"
+            fi
+          done
+          if [ -n "$FAILURES" ]; then
+            echo "::error::trigger failed for:$FAILURES"
+            exit 1
+          fi
