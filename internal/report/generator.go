@@ -30,20 +30,18 @@ type Input struct {
 	Cases       []*models.TestCase
 	FileResults []*models.TestFileResult
 	Skipped     []*models.SkippedCase
-	// ComparisonPrecollectA3/A5 为文件级预收集对比数（公共/仅CPU/仅NPU），
-	// 分别来自 A3 / A5 机器的采集制品 {分类}_cases_by_file.jsonl 动态统计。
-	ComparisonPrecollectA3 map[string]models.FileComparisonCounts
-	ComparisonPrecollectA5 map[string]models.FileComparisonCounts
+	// ComparisonPrecollect 为文件级预收集对比数（公共/仅CPU/仅NPU），
+	// 来自采集制品 {分类}_cases_by_file.jsonl 动态统计。
+	ComparisonPrecollect map[string]models.FileComparisonCounts
 }
 
 // reportContext 一次报告生成的分类上下文。fileMap/sheetMap 为有效映射
 // （EffectiveMaps：仅 FileResults 文件享有模板分类，对齐 Python 从 all_files
-// sheet 回读的语义），comparisonPrecollectA3/A5 为 A3/A5 机器采集制品统计的预收集数。
+// sheet 回读的语义），comparisonPrecollect 为采集制品统计的预收集数。
 type reportContext struct {
 	fileMap                FileMap
 	sheetMap               map[string]string
-	comparisonPrecollectA3 map[string]models.FileComparisonCounts
-	comparisonPrecollectA5 map[string]models.FileComparisonCounts
+	comparisonPrecollect map[string]models.FileComparisonCounts
 	ops                    []string
 	unsupported            *UnsupportedConfig
 }
@@ -116,8 +114,7 @@ func GenerateReports(in Input, outDir string, confFS fs.FS) (*ReportResult, erro
 	ctx := &reportContext{
 		fileMap:                effFileMap,
 		sheetMap:               effSheetMap,
-		comparisonPrecollectA3: in.ComparisonPrecollectA3,
-		comparisonPrecollectA5: in.ComparisonPrecollectA5,
+		comparisonPrecollect: in.ComparisonPrecollect,
 		ops:                    ops,
 		unsupported:            unsupportedCfg,
 	}
@@ -407,13 +404,13 @@ func writeTestcaseRow(f *excelize.File, sheet string, row int, r testcaseRec, st
 	}
 }
 
-// writeAllFilesSheet 写 all_files sheet：11 列（sheet/Classification/Specialization/
-// File/实际运行数量/A3-公共用例/A3-仅CPU/A3-仅NPU/A5-公共用例/A5-仅CPU/A5-仅NPU），
+// writeAllFilesSheet 写 all_files sheet：8 列（sheet/Classification/Specialization/
+// File/实际运行数量/预收集-公共用例/预收集-仅CPU/预收集-仅NPU），
 // 按 (sheet,cls,spec,file) 排序，A/B/C 层级合并（对齐 /tmp/20260909 create_all_files_sheet + merge_hierarchical）。
 func writeAllFilesSheet(f *excelize.File, styles *ReportStyles, fileResults []*models.TestFileResult, ctx *reportContext) {
 	f.SetSheetName("Sheet1", "all_files")
-	headers := []string{"sheet", "Classification", "Specialization", "File", "实际运行数量", "A3-公共用例", "A3-仅CPU", "A3-仅NPU", "A5-公共用例", "A5-仅CPU", "A5-仅NPU"}
-	widths := []float64{16, 16, 16, 60, 16, 14, 12, 12, 14, 12, 12}
+	headers := []string{"sheet", "Classification", "Specialization", "File", "实际运行数量", "预收集-公共用例", "预收集-仅CPU", "预收集-仅NPU"}
+	widths := []float64{16, 16, 16, 60, 16, 14, 12, 12}
 	writeHeader(f, "all_files", headers, styles.HeaderFont)
 	for i, w := range widths {
 		f.SetColWidth("all_files", colLetter(i), colLetter(i), w)
@@ -428,21 +425,18 @@ func writeAllFilesSheet(f *excelize.File, styles *ReportStyles, fileResults []*m
 	}
 
 	type fileRec struct {
-		sheet, classification, specialization, file                              string
-		num                                                                       int
-		a3Shared, a3CPUOnly, a3NPUOnly                                           int
-		a5Shared, a5CPUOnly, a5NPUOnly                                           int
+		sheet, classification, specialization, file string
+		num                                         int
+		shared, cpuOnly, npuOnly                    int
 	}
 	recs := make([]fileRec, 0, len(counts))
 	for fp, num := range counts {
 		fc := classifyFile(ctx.fileMap, fp)
-		a3 := ctx.comparisonPrecollectA3[fp]
-		a5 := ctx.comparisonPrecollectA5[fp]
+		pc := ctx.comparisonPrecollect[fp]
 		recs = append(recs, fileRec{
 			sheet: ctx.sheetOf(fp), classification: fc.Classification,
 			specialization: fc.Specialization, file: fp, num: num,
-			a3Shared: a3.Shared, a3CPUOnly: a3.CPUOnly, a3NPUOnly: a3.NPUOnly,
-			a5Shared: a5.Shared, a5CPUOnly: a5.CPUOnly, a5NPUOnly: a5.NPUOnly,
+			shared: pc.Shared, cpuOnly: pc.CPUOnly, npuOnly: pc.NPUOnly,
 		})
 	}
 	sort.Slice(recs, func(i, j int) bool {
@@ -470,18 +464,12 @@ func writeAllFilesSheet(f *excelize.File, styles *ReportStyles, fileResults []*m
 		f.SetCellStyle("all_files", cellName(3, row), cellName(3, row), styles.VCenter)
 		f.SetCellValue("all_files", cellName(4, row), r.num)
 		f.SetCellStyle("all_files", cellName(4, row), cellName(4, row), styles.Center)
-		f.SetCellValue("all_files", cellName(5, row), r.a3Shared)
+		f.SetCellValue("all_files", cellName(5, row), r.shared)
 		f.SetCellStyle("all_files", cellName(5, row), cellName(5, row), styles.Center)
-		f.SetCellValue("all_files", cellName(6, row), r.a3CPUOnly)
+		f.SetCellValue("all_files", cellName(6, row), r.cpuOnly)
 		f.SetCellStyle("all_files", cellName(6, row), cellName(6, row), styles.Center)
-		f.SetCellValue("all_files", cellName(7, row), r.a3NPUOnly)
+		f.SetCellValue("all_files", cellName(7, row), r.npuOnly)
 		f.SetCellStyle("all_files", cellName(7, row), cellName(7, row), styles.Center)
-		f.SetCellValue("all_files", cellName(8, row), r.a5Shared)
-		f.SetCellStyle("all_files", cellName(8, row), cellName(8, row), styles.Center)
-		f.SetCellValue("all_files", cellName(9, row), r.a5CPUOnly)
-		f.SetCellStyle("all_files", cellName(9, row), cellName(9, row), styles.Center)
-		f.SetCellValue("all_files", cellName(10, row), r.a5NPUOnly)
-		f.SetCellStyle("all_files", cellName(10, row), cellName(10, row), styles.Center)
 		row++
 	}
 	// A/B/C 层级合并：A 相同即合并，A+B 相同才合并 B，A+B+C 全同才合并 C
