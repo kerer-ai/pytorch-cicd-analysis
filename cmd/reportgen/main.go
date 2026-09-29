@@ -13,7 +13,7 @@
 //
 // 可选输入：-collect 指向采集制品（cases-shards）解压目录，动态统计文件级预收集对比数
 // （公共/仅CPU/仅NPU，填充 all_files 的预收集-公共用例/预收集-仅CPU/预收集-仅NPU列）；
-// 未提供 -collect 时回退到 -comparison-md 指向 cpu_npu_case_comparison_summary.md。
+// 未提供 -collect 或目录中无采集数据时，预收集列为空。
 package main
 
 import (
@@ -37,14 +37,13 @@ func main() {
 		runID          = flag.Int64("run-id", 0, "GitHub Actions run ID (required)")
 		zipPath        = flag.String("artifact", "", "path to npu-full-test-summary artifact zip (required)")
 		testReports    = flag.String("test-reports", "", "directory containing test-reports-*.zip (case details)")
-		comparisonMD   = flag.String("comparison-md", "conf/cpu_npu_case_comparison_summary.md", "path to cpu_npu_case_comparison_summary.md (fallback precollect source)")
 		collectDir     = flag.String("collect", "", "extracted directory of collection artifact (cases-shards)")
 		outDir         = flag.String("out", "out", "output directory")
 	)
 	flag.Parse()
 
 	if *runID <= 0 || *zipPath == "" {
-		fmt.Fprintln(os.Stderr, "usage: reportgen -run-id <id> -artifact <npu-full-test-summary.zip> [-test-reports dir] [-comparison-md md] [-collect dir] [-out dir]")
+		fmt.Fprintln(os.Stderr, "usage: reportgen -run-id <id> -artifact <npu-full-test-summary.zip> [-test-reports dir] [-collect dir] [-out dir]")
 		os.Exit(2)
 	}
 
@@ -58,7 +57,7 @@ func main() {
 		fatal(fmt.Errorf("unzip artifact: %w", err))
 	}
 
-	in, err := buildInput(*runID, extractDir, *testReports, *comparisonMD, *collectDir)
+	in, err := buildInput(*runID, extractDir, *testReports, *collectDir)
 	if err != nil {
 		fatal(err)
 	}
@@ -80,9 +79,9 @@ func fatal(err error) {
 // buildInput 从解压目录构建报告输入。
 // 用例明细：testReportsDir 非空时取 test-reports-*.zip（新式，对齐 Python load_cases，
 // 文件名字母序、无 nodeid 去重）；否则取 artifact zip 的 JSONL（旧式 DB 语义）。
-// FileResults/skipped 始终来自 artifact zip；precollect 来自采集目录（-collect）
-// 或回退 comparison md 文件。
-func buildInput(runID int64, extractDir, testReportsDir, comparisonMDPath, collectDir string) (*report.Input, error) {
+// FileResults/skipped 始终来自 artifact zip；precollect 来自采集目录（-collect），
+// 无采集数据时为空（预收集列为空）。
+func buildInput(runID int64, extractDir, testReportsDir, collectDir string) (*report.Input, error) {
 	// FileResults：artifact zip 的 by_file jsonl（v2）/ shard jsonl（v3），(file,type) 后到覆盖
 	fileResults, err := loadFileResults(extractDir)
 	if err != nil {
@@ -115,7 +114,7 @@ func buildInput(runID int64, extractDir, testReportsDir, comparisonMDPath, colle
 		}
 	}
 
-	comp, err := loadPrecollect(comparisonMDPath, collectDir)
+	comp, err := loadPrecollect(collectDir)
 	if err != nil {
 		return nil, err
 	}
@@ -130,22 +129,16 @@ func buildInput(runID int64, extractDir, testReportsDir, comparisonMDPath, colle
 }
 
 // loadPrecollect 返回文件级预收集对比数（公共/仅CPU/仅NPU）。
-// 优先从采集目录动态统计；未提供采集目录时回退到静态 comparison-md。
-func loadPrecollect(comparisonMDPath, collectDir string) (map[string]models.FileComparisonCounts, error) {
-	if collectDir != "" {
-		return loadCollectionDir(collectDir)
+// 仅从采集目录动态统计；未提供采集目录时返回空（预收集列为空）。
+func loadPrecollect(collectDir string) (map[string]models.FileComparisonCounts, error) {
+	if collectDir == "" {
+		return nil, nil
 	}
-	if comparisonMDPath != "" {
-		data, err := os.ReadFile(comparisonMDPath)
-		if err != nil {
-			return nil, fmt.Errorf("read comparison md: %w", err)
-		}
-		return artifact.ParseComparisonMD(data), nil
-	}
-	return nil, nil
+	return loadCollectionDir(collectDir)
 }
 
 // loadCollectionDir 扫描目录下所有 {分类}_cases_by_file.jsonl，统计每文件的预收集对比数。
+// 目录中无匹配文件时不报错，返回空（预收集列为空）。
 func loadCollectionDir(dir string) (map[string]models.FileComparisonCounts, error) {
 	matches, _ := filepath.Glob(filepath.Join(dir, "*_cases_by_file.jsonl"))
 	out := map[string]models.FileComparisonCounts{}
@@ -155,9 +148,6 @@ func loadCollectionDir(dir string) (map[string]models.FileComparisonCounts, erro
 			continue
 		}
 		artifact.ParseCollectionByFile(data, out)
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("no *_cases_by_file.jsonl found under %s", dir)
 	}
 	return out, nil
 }

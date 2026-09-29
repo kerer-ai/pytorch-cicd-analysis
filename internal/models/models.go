@@ -39,8 +39,7 @@ type TestFileResult struct {
 	CreatedAt    string `json:"created_at,omitempty"`
 }
 
-// FileComparisonCounts 从 cpu_npu_case_comparison_summary.md 解析的
-// 文件级预收集用例对比数。
+// FileComparisonCounts 文件级预收集用例对比数。
 type FileComparisonCounts struct {
 	Shared  int // 公共用例
 	CPUOnly int // 仅CPU

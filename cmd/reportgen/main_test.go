@@ -64,7 +64,7 @@ func TestBuildInputOrderingAndConflicts(t *testing.T) {
 		t.Fatalf("unzipAll: %v", err)
 	}
 
-	in, err := buildInput(123, extractDir, "", "", "")
+	in, err := buildInput(123, extractDir, "", "")
 	if err != nil {
 		t.Fatalf("buildInput: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestGenerateReportsEndToEnd(t *testing.T) {
 	if err := unzipAll(zipPath, extractDir); err != nil {
 		t.Fatalf("unzipAll: %v", err)
 	}
-	in, err := buildInput(123, extractDir, "", "", "")
+	in, err := buildInput(123, extractDir, "", "")
 	if err != nil {
 		t.Fatalf("buildInput: %v", err)
 	}
@@ -144,13 +144,13 @@ func TestGenerateReportsEndToEnd(t *testing.T) {
 
 func TestBuildInputNoJSONL(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := buildInput(1, dir, "", "", ""); err == nil {
+	if _, err := buildInput(1, dir, "", ""); err == nil {
 		t.Fatal("expected error for empty dir")
 	}
 }
 
 // TestBuildInputTestReportsPath 新式输入：用例明细来自 test-reports-*.zip（字母序），
-// FileResults/skipped 来自 artifact zip，无 nodeid 去重，precollect 来自 md。
+// FileResults/skipped 来自 artifact zip，无 nodeid 去重，precollect 来自采集目录。
 func TestBuildInputTestReportsPath(t *testing.T) {
 	dir := t.TempDir()
 	zipPath := filepath.Join(dir, "npu-full-test-summary.zip")
@@ -195,10 +195,17 @@ func TestBuildInputTestReportsPath(t *testing.T) {
 	mkShardZip(filepath.Join(trDir, "other.zip"), "shard_x_cases.json",
 		`{"cases": [{"nodeid": "test/x.py::t", "status": "passed", "file": "test/x.py"}]}`)
 
-	comparisonMD := filepath.Join(dir, "cpu_npu_case_comparison_summary.md")
-	os.WriteFile(comparisonMD, []byte("| 测试文件 | 分类 | CPU用例 | NPU用例 | 公共用例 | 仅CPU | 仅NPU |\n| --- | --- | --- | --- | --- | --- | --- |\n| test/test_a.py | core | 12 | 10 | 8 | 4 | 2 |\n"), 0644)
+	// 采集目录：core_cases_by_file.jsonl 含一个公共/一个仅CPU/一个仅NPU 用例
+	collectDir := filepath.Join(dir, "collection")
+	if err := os.MkdirAll(collectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(collectDir, "core_cases_by_file.jsonl"), []byte(
+		"{\"total_file\":1,\"total_cases\":3}\n"+
+			"{\"file_path\": \"test/test_a.py\", \"case_count\": 3, \"cases\": [\"test/test_a.py::TestCommon::test_c\", \"test/test_a.py::TestFooCPU::test_cpu\", \"test/test_a.py::TestFooNPU::test_npu\"]}\n"),
+		0644)
 
-	in, err := buildInput(7, extractDir, trDir, comparisonMD, "")
+	in, err := buildInput(7, extractDir, trDir, collectDir)
 	if err != nil {
 		t.Fatalf("buildInput: %v", err)
 	}
@@ -226,7 +233,7 @@ func TestBuildInputTestReportsPath(t *testing.T) {
 	}
 
 	comp := in.ComparisonPrecollect["test/test_a.py"]
-	if comp.Shared != 8 || comp.CPUOnly != 4 || comp.NPUOnly != 2 {
-		t.Errorf("ComparisonPrecollect[test/test_a.py] = %+v, want {Shared:8 CPUOnly:4 NPUOnly:2}", comp)
+	if comp.Shared != 1 || comp.CPUOnly != 1 || comp.NPUOnly != 1 {
+		t.Errorf("ComparisonPrecollect[test/test_a.py] = %+v, want {Shared:1 CPUOnly:1 NPUOnly:1}", comp)
 	}
 }

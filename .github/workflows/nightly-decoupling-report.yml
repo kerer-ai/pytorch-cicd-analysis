@@ -60,7 +60,7 @@ jobs:
           echo "- completed at: $(echo "$RUN" | jq -r '.updated_at')" >> "$GITHUB_STEP_SUMMARY"
 
       # 查询最近一次执行成功的 nightly_all 采集 run：
-      # 优先 24h 内，没有则扩大到 7 天内；都没有时降级为静态 comparison md（只填预收集列）
+      # 优先 24h 内，没有则扩大到 7 天内；都没有时预收集列为空
       - name: Find latest successful collect run (24h → 7d)
         id: find-collect-run
         if: steps.find-run.outputs.skip != 'true'
@@ -81,7 +81,7 @@ jobs:
           fi
           if [ -z "$RUN" ]; then
             echo "collect_run_id=" >> "$GITHUB_OUTPUT"
-            echo "::warning::No successful collect run in the last 7 days; precollect falls back to static comparison md."
+            echo "::warning::No successful collect run in the last 7 days; precollect columns will be empty."
             exit 0
           fi
           echo "collect_run_id=$(echo "$RUN" | jq -r '.id')" >> "$GITHUB_OUTPUT"
@@ -127,7 +127,7 @@ jobs:
           AID=$(gh api "repos/$UPSTREAM_REPO/actions/runs/$COLLECT_RUN_ID/artifacts" \
             --jq '.artifacts[] | select(.name == "cases-shards") | .id' | head -1)
           if [ -z "$AID" ]; then
-            echo "::warning::cases-shards artifact not found for collect run $COLLECT_RUN_ID; precollect falls back to static comparison md."
+            echo "::warning::cases-shards artifact not found for collect run $COLLECT_RUN_ID; precollect columns will be empty."
             exit 0
           fi
           gh api "repos/$UPSTREAM_REPO/actions/artifacts/$AID/zip" > "collection/cases-shards.zip"
