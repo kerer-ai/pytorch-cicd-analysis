@@ -405,11 +405,11 @@ func writeTestcaseRow(f *excelize.File, sheet string, row int, r testcaseRec, st
 }
 
 // writeAllFilesSheet 写 all_files sheet：8 列（sheet/Classification/Specialization/
-// File/实际运行数量/预收集-公共用例/预收集-仅CPU/预收集-仅NPU），
+// File/实际运行数量/A3全量-公共用例/A3全量-仅CPU/A3全量-仅NPU），
 // 按 (sheet,cls,spec,file) 排序，A/B/C 层级合并（对齐 /tmp/20260909 create_all_files_sheet + merge_hierarchical）。
 func writeAllFilesSheet(f *excelize.File, styles *ReportStyles, fileResults []*models.TestFileResult, ctx *reportContext) {
 	f.SetSheetName("Sheet1", "all_files")
-	headers := []string{"sheet", "Classification", "Specialization", "File", "实际运行数量", "预收集-公共用例", "预收集-仅CPU", "预收集-仅NPU"}
+	headers := []string{"sheet", "Classification", "Specialization", "File", "实际运行数量", "A3全量-公共用例", "A3全量-仅CPU", "A3全量-仅NPU"}
 	widths := []float64{16, 16, 16, 60, 16, 14, 12, 12}
 	writeHeader(f, "all_files", headers, styles.HeaderFont)
 	for i, w := range widths {

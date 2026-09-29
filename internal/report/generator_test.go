@@ -257,7 +257,7 @@ func TestAllFilesSheetHierarchicalMerge(t *testing.T) {
 	defer f.Close()
 
 	// 8 列表头
-	wantHeader := []string{"sheet", "Classification", "Specialization", "File", "实际运行数量", "预收集-公共用例", "预收集-仅CPU", "预收集-仅NPU"}
+	wantHeader := []string{"sheet", "Classification", "Specialization", "File", "实际运行数量", "A3全量-公共用例", "A3全量-仅CPU", "A3全量-仅NPU"}
 	for i, h := range wantHeader {
 		got, _ := f.GetCellValue("all_files", cellName(i, 1))
 		if got != h {
