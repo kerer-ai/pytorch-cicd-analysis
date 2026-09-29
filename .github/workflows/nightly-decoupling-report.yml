@@ -38,6 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "$INPUT_RUN_ID" ]; then
+            INPUT_RUN_ID=$(printf '%s' "$INPUT_RUN_ID" | tr -d '[:space:]')
             echo "run_id=$INPUT_RUN_ID" >> "$GITHUB_OUTPUT"
             echo "### Upstream nightly run" >> "$GITHUB_STEP_SUMMARY"
             echo "- run: manually specified [$INPUT_RUN_ID](https://github.com/$UPSTREAM_REPO/actions/runs/$INPUT_RUN_ID) (window filter bypassed)" >> "$GITHUB_STEP_SUMMARY"
@@ -53,7 +54,7 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          RUN_ID=$(echo "$RUN" | jq -r '.id')
+          RUN_ID=$(echo "$RUN" | jq -r '.id' | tr -d '[:space:]')
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
           echo "### Upstream nightly run" >> "$GITHUB_STEP_SUMMARY"
           echo "- run: [#${RUN_ID}]($(echo "$RUN" | jq -r '.html_url'))" >> "$GITHUB_STEP_SUMMARY"
@@ -84,7 +85,7 @@ jobs:
             echo "::warning::No successful collect run in the last 7 days; precollect columns will be empty."
             exit 0
           fi
-          echo "collect_run_id=$(echo "$RUN" | jq -r '.id')" >> "$GITHUB_OUTPUT"
+          echo "collect_run_id=$(echo "$RUN" | jq -r '.id' | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
           echo "### Upstream collect run" >> "$GITHUB_STEP_SUMMARY"
           echo "- window: $WINDOW (24h first, then 7d)" >> "$GITHUB_STEP_SUMMARY"
           echo "- run: [#$(echo "$RUN" | jq -r '.id')]($(echo "$RUN" | jq -r '.html_url'))" >> "$GITHUB_STEP_SUMMARY"
