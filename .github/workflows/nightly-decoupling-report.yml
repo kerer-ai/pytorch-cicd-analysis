@@ -125,7 +125,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p collection
-          AID=$(gh api "repos/$UPSTREAM_REPO/actions/runs/$COLLECT_RUN_ID/artifacts" \
+          AID=$(gh api "repos/$UPSTREAM_REPO/actions/runs/$COLLECT_RUN_ID/artifacts?per_page=100" \
             --jq '.artifacts[] | select(.name == "cases-shards") | .id' | head -1)
           if [ -z "$AID" ]; then
             echo "::warning::cases-shards artifact not found for collect run $COLLECT_RUN_ID; precollect columns will be empty."
