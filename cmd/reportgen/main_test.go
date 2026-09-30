@@ -22,7 +22,7 @@ const tensorJSONL = `{"total_file":1,"total_cases":2}
 
 const skippedJSON = `{"total_skipped": 2, "sources": ["disabled_testcases.json", "running_skiped_testcases.json"],
 "skipped_cases": [
-  {"nodeid": "test/test_a.py::test_skip1", "file": "test/test_a.py", "skip_reason": "disabled reason", "skip_category": "cat-a", "skip_source": "disabled_testcases.json", "issue": null},
+  {"nodeid": "test/test_a.py::test_skip1", "file": "test/test_a.py", "skip_reason": "disabled reason", "skip_category": "cat-a", "skip_source": "disabled_testcases.json", "issue": "I6NPD3-ops-not-supported"},
   {"nodeid": "test/test_a.py::test_skip1", "file": "test/test_a.py", "skip_reason": "dup", "skip_category": "cat-a", "skip_source": "disabled_testcases.json", "issue": null},
   {"nodeid": "test/test_b.py::test_x", "file": "test/test_b.py", "skip_reason": "running skip reason", "skip_source": "running_skiped_testcases.json"}
 ]}`
@@ -97,6 +97,9 @@ func TestBuildInputOrderingAndConflicts(t *testing.T) {
 	}
 	if in.Skipped[0].SkipReason != "disabled reason" || in.Skipped[1].SkipSource != "running_skiped_testcases.json" {
 		t.Fatalf("skipped order/dedup wrong: %+v", in.Skipped)
+	}
+	if in.Skipped[0].Issue != "I6NPD3-ops-not-supported" {
+		t.Fatalf("skipped[0].issue = %q, want I6NPD3-ops-not-supported", in.Skipped[0].Issue)
 	}
 }
 

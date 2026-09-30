@@ -124,8 +124,14 @@ func ParseSkippedCases(data []byte) ([]*models.SkippedCase, error) {
 		}
 		seen[raw.NodeID] = true
 		issue := ""
-		if len(raw.Issue) > 0 && string(raw.Issue) != "null" {
-			issue = string(raw.Issue)
+		if len(raw.Issue) > 0 {
+			var s string
+			if err := json.Unmarshal(raw.Issue, &s); err == nil {
+				issue = s
+			} else {
+				// 上游 issue 为非字符串标量/对象时原样保留（数字、对象等）
+				issue = string(raw.Issue)
+			}
 		}
 		result = append(result, &models.SkippedCase{
 			NodeID:       raw.NodeID,
