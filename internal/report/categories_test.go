@@ -25,8 +25,8 @@ func TestCategorizerCompile(t *testing.T) {
 	if len(c.categories) == 0 {
 		t.Fatal("expected categories loaded")
 	}
-	if len(c.categories) != 14 {
-		t.Errorf("expected 14 main categories, got %d", len(c.categories))
+	if len(c.categories) != 17 {
+		t.Errorf("expected 17 main categories, got %d", len(c.categories))
 	}
 	for _, cat := range c.categories {
 		for _, r := range cat.Rules {
@@ -69,7 +69,7 @@ func TestCategorizeEngineParity(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cat, evidence := c.Categorize(tc.log)
+			cat, evidence, _ := c.Categorize(tc.log)
 			if cat != tc.cat {
 				t.Errorf("Categorize(%q) category = %q, want %q (evidence=%q)", tc.log, cat, tc.cat, evidence)
 			}
@@ -82,7 +82,7 @@ func TestCategorizeEvidenceTemplates(t *testing.T) {
 
 	// common 聚合分类：主规则 regex 命中 → 子分类 keywords_any 'call aclnn' 命中
 	// evidence = 关键字上下文（extractContext，与 Python _extract_context 一致）
-	cat, ev := c.Categorize("RuntimeError: call aclnnAdd failed, error code is 10001")
+	cat, ev, _ := c.Categorize("RuntimeError: call aclnnAdd failed, error code is 10001")
 	if cat != "aclnn调用失败" {
 		t.Fatalf("category = %q", cat)
 	}
@@ -92,7 +92,7 @@ func TestCategorizeEvidenceTemplates(t *testing.T) {
 
 	// 无 evidence 模板的主分类 regex：evidence = 匹配片段上下文（extractContext），
 	// 非捕获组模板拼接（对齐 Python _extract_context(text, m.group(0))）
-	cat, ev = c.Categorize("RuntimeError: Could not run 'aten::foo' with arguments from the 'CUDA' backend")
+	cat, ev, _ = c.Categorize("RuntimeError: Could not run 'aten::foo' with arguments from the 'CUDA' backend")
 	if cat != "算子未实现" {
 		t.Fatalf("category = %q", cat)
 	}
@@ -104,7 +104,7 @@ func TestCategorizeEvidenceTemplates(t *testing.T) {
 
 func TestCategorizeEmptyLogEvidence(t *testing.T) {
 	c := loadTestCategorizer(t)
-	cat, ev := c.Categorize("")
+	cat, ev, _ := c.Categorize("")
 	if cat != "其他" || ev != "空日志" {
 		t.Errorf("Categorize(\"\") = %q, %q; want 其他, 空日志", cat, ev)
 	}
@@ -113,12 +113,12 @@ func TestCategorizeEmptyLogEvidence(t *testing.T) {
 func TestCategorizeTimeoutExcludeKeywords(t *testing.T) {
 	c := loadTestCategorizer(t)
 
-	cat, _ := c.Categorize("RuntimeError: hccl_connect_timeout set to 100")
+	cat, _, _ := c.Categorize("RuntimeError: hccl_connect_timeout set to 100")
 	if cat == "超时" {
 		t.Error("hccl_connect_timeout should be excluded from 超时")
 	}
 
-	cat, _ = c.Categorize("RuntimeError: communicator creation interface failed with timeout")
+	cat, _, _ = c.Categorize("RuntimeError: communicator creation interface failed with timeout")
 	if cat == "超时" {
 		t.Error("communicator creation interface should be excluded from 超时")
 	}
@@ -127,7 +127,7 @@ func TestCategorizeTimeoutExcludeKeywords(t *testing.T) {
 func TestCategorizeAssertionRegexCaseSensitive(t *testing.T) {
 	c := loadTestCategorizer(t)
 
-	cat, _ := c.Categorize("RuntimeError: tensor-likes are not close (lowercase)")
+	cat, _, _ := c.Categorize("RuntimeError: tensor-likes are not close (lowercase)")
 	if cat == "断言失败-数值精度不匹配" {
 		t.Error("lowercase 'tensor-likes are not close' should not enter assertion branch")
 	}
@@ -171,7 +171,7 @@ func TestNewCategorizerSkipsInvalidRegex(t *testing.T) {
 	if c.categories[1].Rules[0].compiled != nil {
 		t.Error("invalid regex rule should have nil compiled regex")
 	}
-	cat, _ := c.Categorize("something boom happened")
+	cat, _, _ := c.Categorize("something boom happened")
 	if cat != "ok" {
 		t.Errorf("keyword rule should still match: got %q", cat)
 	}

@@ -8,6 +8,7 @@
   "# exclude_keywords": "排除关键字列表, 含任一排除关键字时跳过该分类",
   "# 大小写": "所有关键字/正则匹配均不区分大小写，配置中保留原始大小写以增强可读性",
   "# CANN问题": "由 conf/UNSUPPORTED.json 单独定义，分类名命中名单则标记为CANN问题",
+  "# root_cause": "分类的根因/处理建议，命中该分类（含子分类）后写入 failed_testcases.xlsx 的「备注」列",
 
   "categories": [
     {
@@ -178,6 +179,21 @@
       "name": "意外成功",
       "rules": [
         {"keyword": "unexpected success"}
+      ]
+    },
+    {
+      "name": "量化 CPU engine 缺失",
+      "rules": [
+        {"keyword": "unknown architecture"},
+        {"keyword": "unknown architecure"}
+      ],
+      "root_cause": "## 七、处理建议\n\n1. **优先屏蔽**：这些是 torchvision / ONNX 量化模型在 CPU 上的用例，在 NPU 环境里本不参与 NPU 能力验证，建议统一屏蔽，屏蔽原因标注「量化 CPU 引擎在鲲鹏 ARM 下不支持，非 NPU 问题」。\n2. 若确需在 CPU 跑通，需给 torch 编译/启用 ARM 可用的量化 engine（oneDNN ARM 或 QNNPACK），但这与 NPU 用例分析无关。\n3. 不建议按算子树形排查：报错点虽在 `conv2d_prepack`，但根因是 engine 缺失，逐算子看会浪费精力。"
+    },
+    {
+      "name": "其他-Inductor编译错误",
+      "rules": [
+        {"keyword": "Device npu not supported", "root_cause": "inductor wrapper 代码生成不识别 npu 设备"},
+        {"keyword": "no scheduling registered for device npu", "root_cause": "inductor 无 npu 调度注册（reduction 算子触发）"}
       ]
     }
   ],

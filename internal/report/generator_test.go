@@ -357,12 +357,12 @@ func TestFailedCategorizeUsesTruncatedMessage(t *testing.T) {
 		t.Fatalf("truncateCellString len = %d, want %d", len([]rune(got)), maxCellChars)
 	}
 	// 截断后不含 "timeout" → 走断言/其他路径而非超时
-	cat1, _ := cat.Categorize(truncateCellString(longMsg))
+	cat1, _, _ := cat.Categorize(truncateCellString(longMsg))
 	if cat1 == "超时" {
 		t.Errorf("truncated message should not match 超时, got %q", cat1)
 	}
 	// 完整消息含 "timeout" → 超时（证明差异确实来自截断语义）
-	cat2, _ := cat.Categorize(longMsg)
+	cat2, _, _ := cat.Categorize(longMsg)
 	if cat2 != "超时" {
 		t.Errorf("full message should match 超时, got %q", cat2)
 	}

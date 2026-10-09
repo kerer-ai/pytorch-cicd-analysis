@@ -22,6 +22,7 @@ type Rule struct {
 	ExtraKeywords       []string `json:"extra_keywords"`
 	FallbackKeywords    []string `json:"fallback_keywords"`
 	Evidence            string   `json:"evidence"`
+	RootCause           string   `json:"root_cause"`
 
 	compiled *regexp.Regexp
 }
@@ -31,6 +32,7 @@ type Category struct {
 	Rules           []Rule   `json:"rules"`
 	Subcategories   []Rule   `json:"subcategories"`
 	ExcludeKeywords []string `json:"exclude_keywords"`
+	RootCause       string   `json:"root_cause"`
 }
 
 type subDefault struct {
@@ -101,9 +103,19 @@ var (
 	rePlaceholder          = regexp.MustCompile(`\{(\d+)\}`)
 )
 
-func (c *Categorizer) Categorize(log string) (string, string) {
+// coalesce 返回第一个非空字符串。
+func coalesce(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func (c *Categorizer) Categorize(log string) (string, string, string) {
 	if log == "" {
-		return "其他", "空日志"
+		return "其他", "空日志", ""
 	}
 	text := log
 	low := strings.ToLower(log)
@@ -111,7 +123,7 @@ func (c *Categorizer) Categorize(log string) (string, string) {
 
 	for _, cat := range c.categories {
 		for _, rule := range cat.Rules {
-			evidence, matched := matchRule(&rule, text, low)
+			evidence, ruleRC, matched := matchRule(&rule, text, low)
 			if !matched {
 				continue
 			}
@@ -128,9 +140,10 @@ func (c *Categorizer) Categorize(log string) (string, string) {
 				}
 			}
 			if len(cat.Subcategories) > 0 {
-				return matchSubcategory(cat.Subcategories, text, low, runtimeMsg, cat.Name)
+				name, subEvidence, subRC := matchSubcategory(cat.Subcategories, text, low, runtimeMsg, cat.Name)
+				return name, subEvidence, coalesce(subRC, ruleRC, cat.RootCause)
 			}
-			return cat.Name, evidence
+			return cat.Name, evidence, coalesce(ruleRC, cat.RootCause)
 		}
 	}
 
@@ -140,23 +153,25 @@ func (c *Categorizer) Categorize(log string) (string, string) {
 		reAssertionTensorLikes.MatchString(text) ||
 		reAssertionScalars.MatchString(text)
 	if isAssertion {
-		return matchSubcategory(c.assertionRules, text, low, runtimeMsg, c.assertionDefault.Name)
+		name, evidence, rc := matchSubcategory(c.assertionRules, text, low, runtimeMsg, c.assertionDefault.Name)
+		return name, evidence, rc
 	}
-	return matchSubcategory(c.otherRules, text, low, runtimeMsg, c.otherDefault.Name)
+	name, evidence, rc := matchSubcategory(c.otherRules, text, low, runtimeMsg, c.otherDefault.Name)
+	return name, evidence, rc
 }
 
-func matchRule(rule *Rule, text, low string) (string, bool) {
+func matchRule(rule *Rule, text, low string) (string, string, bool) {
 	if rule.Regex != "" && rule.compiled != nil {
 		m := rule.compiled.FindStringSubmatch(text)
 		if m != nil {
 			if rule.Evidence != "" {
 				args := append([]string{m[0]}, m[1:]...)
-				return formatEvidence(rule.Evidence, args, rule.Evidence), true
+				return formatEvidence(rule.Evidence, args, rule.Evidence), rule.RootCause, true
 			}
 			// 无 evidence 模板：提取匹配片段上下文（对齐 Python _extract_context(text, m.group(0))）
-			return extractContext(text, m[0]), true
+			return extractContext(text, m[0]), rule.RootCause, true
 		}
-		return "", false
+		return "", "", false
 	}
 	if len(rule.AllKeywords) > 0 {
 		all := true
@@ -167,19 +182,19 @@ func matchRule(rule *Rule, text, low string) (string, bool) {
 			}
 		}
 		if all {
-			return extractContext(text, rule.AllKeywords[0]), true
+			return extractContext(text, rule.AllKeywords[0]), rule.RootCause, true
 		}
-		return "", false
+		return "", "", false
 	}
 	if rule.Keyword != "" {
 		if strings.Contains(low, strings.ToLower(rule.Keyword)) {
-			return extractContext(text, rule.Keyword), true
+			return extractContext(text, rule.Keyword), rule.RootCause, true
 		}
 	}
-	return "", false
+	return "", "", false
 }
 
-func matchSubcategory(rules []Rule, text, low, runtimeMsg, defaultName string) (string, string) {
+func matchSubcategory(rules []Rule, text, low, runtimeMsg, defaultName string) (string, string, string) {
 	for i := range rules {
 		rule := &rules[i]
 		matched := false
@@ -287,13 +302,13 @@ func matchSubcategory(rules []Rule, text, low, runtimeMsg, defaultName string) (
 			if evidence == "" {
 				evidence = defaultName
 			}
-			return name, evidence
+			return name, evidence, rule.RootCause
 		}
 	}
 	if runtimeMsg != "" {
-		return defaultName, runtimeMsg
+		return defaultName, runtimeMsg, ""
 	}
-	return defaultName, defaultName
+	return defaultName, defaultName, ""
 }
 
 // extractContext 提取 keyword 出现位置的前后上下文（按码点，对齐 Python

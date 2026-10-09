@@ -547,7 +547,7 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 	widths := []float64{20, 25, 55, 90, 14, 80, 22, 50, 16, 14, 14, 20, 30, 14, 30}
 
 	type rec struct {
-		classification, specialization, file, nodeid, status, message, category, evidence string
+		classification, specialization, file, nodeid, status, message, category, evidence, rootCause string
 	}
 
 	var allRecords []rec
@@ -564,9 +564,9 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 			}
 			// Python classify_failed 从 all_testcases.xlsx 回读消息再分类，
 			// 超长消息已被单元格上限截断到 32767 字符——此处同样以截断后消息分类
-			category, evidence := cat.Categorize(truncateCellString(tc.Message))
+			category, evidence, rootCause := cat.Categorize(truncateCellString(tc.Message))
 			key := fc.Classification + "+" + fc.Specialization
-			r := rec{fc.Classification, fc.Specialization, fg.path, tc.NodeID, tc.Status, tc.Message, category, evidence}
+			r := rec{fc.Classification, fc.Specialization, fg.path, tc.NodeID, tc.Status, tc.Message, category, evidence, rootCause}
 			allRecords = append(allRecords, r)
 			grouped[key] = append(grouped[key], r)
 		}
@@ -618,9 +618,13 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 				f.SetCellValue(sheet, cellName(8, row), "是")
 			}
 
-			for col := 8; col < 15; col++ {
+			for col := 8; col < 14; col++ {
 				f.SetCellStyle(sheet, cellName(col, row), cellName(col, row), styles.Center)
 			}
+
+			// O 列：备注（根因/处理建议，来自分类的 root_cause 字段）
+			setCellValueSkippingEmpty(f, sheet, cellName(14, row), r.rootCause)
+			f.SetCellStyle(sheet, cellName(14, row), cellName(14, row), styles.WrapLeft)
 			row++
 		}
 		setGeneratedDimension(f, sheet, len(headers)-1, row-1)
