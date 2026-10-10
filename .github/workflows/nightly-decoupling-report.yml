@@ -21,7 +21,9 @@ concurrency:
 env:
   UPSTREAM_REPO: Ascend/pytorch
   UPSTREAM_WORKFLOW: nightly.yml
-  COLLECT_WORKFLOW: nightly_all.yml
+  # Upstream renamed nightly_all.yml -> nightly-a3.yml in 393d083b (2026-09-30).
+  # cases-shards artifact: produced by the collect job, retention 7 days.
+  COLLECT_WORKFLOW: nightly-a3.yml
 
 jobs:
   report:
@@ -60,8 +62,9 @@ jobs:
           echo "- run: [#${RUN_ID}]($(echo "$RUN" | jq -r '.html_url'))" >> "$GITHUB_STEP_SUMMARY"
           echo "- completed at: $(echo "$RUN" | jq -r '.updated_at')" >> "$GITHUB_STEP_SUMMARY"
 
-      # 查询最近一次执行成功的 nightly_all 采集 run：
-      # 优先 24h 内，没有则扩大到 7 天内；都没有时预收集列为空
+      # 查询最近一次执行成功的 nightly-a3 采集 run：
+      # 优先 24h 内，没有则扩大到 7 天内（cases-shards 产物保留期也是 7 天，
+      # 更早的 run 即使查到产物也已过期）；都没有时预收集列为空
       - name: Find latest successful collect run (24h → 7d)
         id: find-collect-run
         if: steps.find-run.outputs.skip != 'true'
