@@ -1,10 +1,13 @@
 name: Trigger Ascend Nightly All & A5
 
 # Scheduled trigger for two Ascend/pytorch "full test" nightlies on ci-test:
-#   - nightly_all.yml  (Nightly Build and Test A3 (All))
+#   - nightly-a3.yml   (Nightly Build and Test A3 (All))
 #   - nightly-a5.yml   (Nightly Build and Test A5 (All))
 # Both only exist on the ci-test branch and expose bare workflow_dispatch
 # (no inputs), so they are dispatched with --ref ci-test.
+# Note: upstream renamed nightly_all.yml -> nightly-a3.yml in 393d083b
+# (2026-09-30); dispatching the stale old name fails with a misleading
+# HTTP 422 "Workflow does not have 'workflow_dispatch' trigger".
 #
 # Schedule: Tuesday & Thursday 18:00 Beijing = UTC 10:00. Minute is offset
 # from 0 because GitHub drops/delays minute-0 scheduled runs under load
@@ -24,13 +27,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Trigger Ascend/pytorch nightly_all & nightly-a5
+      - name: Trigger Ascend/pytorch nightly-a3 & nightly-a5
         env:
           GH_TOKEN: ${{ secrets.ASCEND_PAT }}
         run: |
           set -euo pipefail
           FAILURES=""
-          for wf in nightly_all.yml nightly-a5.yml; do
+          for wf in nightly-a3.yml nightly-a5.yml; do
             # Guard: skip if this upstream workflow is already running/queued
             ACTIVE=$(gh run list --workflow="$wf" --repo Ascend/pytorch \
               --status in_progress --json databaseId --jq 'length')
