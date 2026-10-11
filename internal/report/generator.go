@@ -132,11 +132,12 @@ func GenerateReports(in Input, outDir string, confFS fs.FS) (*ReportResult, erro
 	orderedFiles := buildOrderedFiles(in.Cases)
 	shouldNotDo := BuildShouldNotDoSet(summaryTemplate)
 	normalFiles, sndFiles := partitionShouldNotDo(orderedFiles, shouldNotDo)
+	normalSkipped, sndSkipped := partitionSkippedSND(in.Skipped, shouldNotDo)
 
 	outputFiles := make([]string, 0, 7)
 
 	f1 := filepath.Join(workDir, "all_testcases.xlsx")
-	if err := writeAllTestcases(f1, normalFiles, ctx, in.FileResults, in.Skipped); err != nil {
+	if err := writeAllTestcases(f1, normalFiles, ctx, in.FileResults, normalSkipped); err != nil {
 		return nil, fmt.Errorf("all_testcases: %w", err)
 	}
 	outputFiles = append(outputFiles, f1)
@@ -150,7 +151,7 @@ func GenerateReports(in Input, outDir string, confFS fs.FS) (*ReportResult, erro
 
 	// ShouldNotDo（Priority 为 "Should Not Do"）文件的用例单独输出
 	f3 := filepath.Join(workDir, "ShouldNotDo_TestCases.xlsx")
-	if err := writeShouldNotDoTestcases(f3, sndFiles, ctx); err != nil {
+	if err := writeShouldNotDoTestcases(f3, sndFiles, sndSkipped, ctx); err != nil {
 		return nil, fmt.Errorf("should-not-do testcases: %w", err)
 	}
 	outputFiles = append(outputFiles, f3)
@@ -162,7 +163,7 @@ func GenerateReports(in Input, outDir string, confFS fs.FS) (*ReportResult, erro
 	outputFiles = append(outputFiles, f4)
 
 	f5 := filepath.Join(workDir, "all_testcases_report.md")
-	if err := writeMarkdownReport(f5, normalFiles, ctx, failedCatCounts, in.Skipped, sndFiles); err != nil {
+	if err := writeMarkdownReport(f5, normalFiles, ctx, failedCatCounts, normalSkipped, sndFiles, sndSkipped); err != nil {
 		return nil, fmt.Errorf("markdown: %w", err)
 	}
 	outputFiles = append(outputFiles, f5)
@@ -338,21 +339,21 @@ func writeAllTestcases(path string, orderedFiles []fileGroup, ctx *reportContext
 	}
 
 	// 最后一个 sheet：[黑名单跳过]（对齐 python Step4：追加进 all_testcases.xlsx）
-	writeBlacklistSheet(f, styles, skipped, ctx)
+	writeBlacklistSheet(f, styles, "黑名单跳过", skipped, ctx)
 
 	return f.SaveAs(path)
 }
 
-// writeBlacklistSheet 写「黑名单跳过」sheet：8 列，A/B 来自有效映射（all_files 语义），
+// writeBlacklistSheet 写黑名单跳过 sheet：8 列，A/B 来自有效映射（all_files 语义），
 // skip来源按 disabled/running 填色，A/B/C 逐列合并（对齐 python）。
-func writeBlacklistSheet(f *excelize.File, styles *ReportStyles, skipped []*models.SkippedCase, ctx *reportContext) {
+func writeBlacklistSheet(f *excelize.File, styles *ReportStyles, sheetName string, skipped []*models.SkippedCase, ctx *reportContext) {
 	headers := []string{"Classification", "Specialization", "File", "nodeid", "skip来源", "skip分类", "skip原因", "issue"}
 	widths := []float64{20, 25, 55, 90, 25, 22, 80, 20}
 
-	f.NewSheet("黑名单跳过")
-	writeHeader(f, "黑名单跳过", headers, styles.HeaderFont)
+	f.NewSheet(sheetName)
+	writeHeader(f, sheetName, headers, styles.HeaderFont)
 	for i, w := range widths {
-		f.SetColWidth("黑名单跳过", colLetter(i), colLetter(i), w)
+		f.SetColWidth(sheetName, colLetter(i), colLetter(i), w)
 	}
 
 	row := 2
@@ -364,27 +365,27 @@ func writeBlacklistSheet(f *excelize.File, styles *ReportStyles, skipped []*mode
 		}
 		for col, v := range []string{fc.Classification, fc.Specialization, sc.FilePath, sc.NodeID} {
 			cell := cellName(col, row)
-			setCellValueSkippingEmpty(f, "黑名单跳过", cell, v)
-			f.SetCellStyle("黑名单跳过", cell, cell, styles.VCenter)
+			setCellValueSkippingEmpty(f, sheetName, cell, v)
+			f.SetCellStyle(sheetName, cell, cell, styles.VCenter)
 		}
 		sourceCell := cellName(4, row)
-		setCellValueSkippingEmpty(f, "黑名单跳过", sourceCell, sc.SkipSource)
+		setCellValueSkippingEmpty(f, sheetName, sourceCell, sc.SkipSource)
 		if sc.SkipSource == "disabled_testcases.json" {
-			f.SetCellStyle("黑名单跳过", sourceCell, sourceCell, styles.BlackSkipFill)
+			f.SetCellStyle(sheetName, sourceCell, sourceCell, styles.BlackSkipFill)
 		} else {
-			f.SetCellStyle("黑名单跳过", sourceCell, sourceCell, styles.RunningSkipFill)
+			f.SetCellStyle(sheetName, sourceCell, sourceCell, styles.RunningSkipFill)
 		}
-		setCellValueSkippingEmpty(f, "黑名单跳过", cellName(5, row), category)
-		f.SetCellStyle("黑名单跳过", cellName(5, row), cellName(5, row), styles.Center)
-		setCellValueSkippingEmpty(f, "黑名单跳过", cellName(6, row), sc.SkipReason)
-		f.SetCellStyle("黑名单跳过", cellName(6, row), cellName(6, row), styles.WrapVCenter)
-		setCellValueSkippingEmpty(f, "黑名单跳过", cellName(7, row), sc.Issue)
-		f.SetCellStyle("黑名单跳过", cellName(7, row), cellName(7, row), styles.Center)
+		setCellValueSkippingEmpty(f, sheetName, cellName(5, row), category)
+		f.SetCellStyle(sheetName, cellName(5, row), cellName(5, row), styles.Center)
+		setCellValueSkippingEmpty(f, sheetName, cellName(6, row), sc.SkipReason)
+		f.SetCellStyle(sheetName, cellName(6, row), cellName(6, row), styles.WrapVCenter)
+		setCellValueSkippingEmpty(f, sheetName, cellName(7, row), sc.Issue)
+		f.SetCellStyle(sheetName, cellName(7, row), cellName(7, row), styles.Center)
 		row++
 	}
-	setGeneratedDimension(f, "黑名单跳过", 7, row-1)
+	setGeneratedDimension(f, sheetName, 7, row-1)
 	if row > 3 {
-		mergeIdenticalCells(f, "黑名单跳过", 2, row-1, []int{0, 1, 2})
+		mergeIdenticalCells(f, sheetName, 2, row-1, []int{0, 1, 2})
 	}
 }
 
@@ -678,9 +679,22 @@ func partitionShouldNotDo(files []fileGroup, shouldNotDo map[string]bool) (norma
 	return normal, excluded
 }
 
-// writeShouldNotDoTestcases 将 ShouldNotDo 文件的用例单独输出（含全部状态，单 sheet），
-// 列结构与 all_testcases 一致。
-func writeShouldNotDoTestcases(path string, orderedFiles []fileGroup, ctx *reportContext) error {
+// partitionSkippedSND 将黑名单跳过用例按文件是否命中 ShouldNotDo 集合切分，
+// SND 文件的用例从主报告（黑名单 sheet / md 统计）移出并归入 SND 输出。
+func partitionSkippedSND(skipped []*models.SkippedCase, shouldNotDo map[string]bool) (normal, excluded []*models.SkippedCase) {
+	for _, sc := range skipped {
+		if shouldNotDo[sc.FilePath] {
+			excluded = append(excluded, sc)
+		} else {
+			normal = append(normal, sc)
+		}
+	}
+	return normal, excluded
+}
+
+// writeShouldNotDoTestcases 将 ShouldNotDo 文件的用例单独输出：两个 sheet，
+// 「ShouldNotDo」为运行明细（含全部状态），「黑名单跳过」为 SND 文件被黑名单跳过的用例。
+func writeShouldNotDoTestcases(path string, orderedFiles []fileGroup, skipped []*models.SkippedCase, ctx *reportContext) error {
 	f := excelize.NewFile()
 	styles := newReportStyles(f)
 
@@ -697,6 +711,9 @@ func writeShouldNotDoTestcases(path string, orderedFiles []fileGroup, ctx *repor
 		row++
 	}
 	setGeneratedDimension(f, "ShouldNotDo", len(allTestcasesHeaders)-1, row-1)
+
+	writeBlacklistSheet(f, styles, "黑名单跳过", skipped, ctx)
+
 	return f.SaveAs(path)
 }
 
