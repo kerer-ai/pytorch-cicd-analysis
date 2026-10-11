@@ -185,7 +185,8 @@
       "name": "量化 CPU engine 缺失",
       "rules": [
         {"keyword": "unknown architecture"},
-        {"keyword": "unknown architecure"}
+        {"keyword": "unknown architecure"},
+        {"keyword": "Didn't find engine for operation quantized::linear_prepack X86", "root_cause": "当前 PyTorch 构建里没有编译/注册 FBGEMM（X86 量化引擎），导致 quantized::linear_prepack 这个量化算子找不到可执行的后端引擎。"}
       ],
       "root_cause": "## 七、处理建议\n\n1. **优先屏蔽**：这些是 torchvision / ONNX 量化模型在 CPU 上的用例，在 NPU 环境里本不参与 NPU 能力验证，建议统一屏蔽，屏蔽原因标注「量化 CPU 引擎在鲲鹏 ARM 下不支持，非 NPU 问题」。\n2. 若确需在 CPU 跑通，需给 torch 编译/启用 ARM 可用的量化 engine（oneDNN ARM 或 QNNPACK），但这与 NPU 用例分析无关。\n3. 不建议按算子树形排查：报错点虽在 `conv2d_prepack`，但根因是 engine 缺失，逐算子看会浪费精力。"
     },
@@ -194,6 +195,30 @@
       "rules": [
         {"keyword": "Device npu not supported", "root_cause": "inductor wrapper 代码生成不识别 npu 设备"},
         {"keyword": "no scheduling registered for device npu", "root_cause": "inductor 无 npu 调度注册（reduction 算子触发）"}
+      ]
+    },
+    {
+      "name": "device 硬编码-未解耦",
+      "rules": [
+        {"keyword": "Unexpected device_type: npu", "root_cause": "消除硬编码，通过解耦可以解决"}
+      ]
+    },
+    {
+      "name": "NPU/Triton 适配不完整",
+      "rules": [
+        {"keyword": "all inputs are expected to be on the same GPU device", "root_cause": "Triton 专用（CUDA/GPU 定位）的稀疏 SDPA kernel 在设备一致性检查上失败了，属于 CUDA 专用代码在 NPU 上不适用的问题"}
+      ]
+    },
+    {
+      "name": "序列化兼容性问题",
+      "rules": [
+        {"keyword": "_pickle.UnpicklingError: Unsupported global: GLOBAL torch.jit._pickle.restore_type_tag was not an allowed global by default", "root_cause": "- torch.load 默认 weights_only=True ，C++ torch::save 产物带 legacy type tag， restore_type_tag 不在默认白名单。\n- 修复方法 ：加载前 torch.serialization.add_safe_globals([torch.jit._pickle.restore_type_tag]) ，或 torch.load(path, weights_only=False) 。"}
+      ]
+    },
+    {
+      "name": "autocast 不支持",
+      "rules": [
+        {"regex": "Expected one of cpu, cuda,.*privateuseone device type at start of device string: openreg", "root_cause": "该设备没有注册 autocast 支持，_is_autocast_available 无法识别。"}
       ]
     }
   ],

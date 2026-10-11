@@ -25,8 +25,8 @@ func TestCategorizerCompile(t *testing.T) {
 	if len(c.categories) == 0 {
 		t.Fatal("expected categories loaded")
 	}
-	if len(c.categories) != 17 {
-		t.Errorf("expected 17 main categories, got %d", len(c.categories))
+	if len(c.categories) != 21 {
+		t.Errorf("expected 21 main categories, got %d", len(c.categories))
 	}
 	for _, cat := range c.categories {
 		for _, r := range cat.Rules {
