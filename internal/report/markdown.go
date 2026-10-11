@@ -179,7 +179,7 @@ func writeMarkdownReport(path string, orderedFiles []fileGroup, ctx *reportConte
 
 	// ShouldNotDo 用例总结：已从 all_testcases / failed_testcases 排除，单独输出
 	if len(sndFiles) > 0 || len(sndSkipped) > 0 {
-		var sndTotal, sndPassed, sndFailed, sndErrors, sndSkipped int
+		var sndTotal, sndPassed, sndFailed, sndErrors, sndSkippedCount int
 		for _, fg := range sndFiles {
 			for _, tc := range fg.cases {
 				sndTotal++
@@ -191,7 +191,7 @@ func writeMarkdownReport(path string, orderedFiles []fileGroup, ctx *reportConte
 				case "error":
 					sndErrors++
 				case "skipped":
-					sndSkipped++
+					sndSkippedCount++
 				}
 			}
 		}
@@ -203,7 +203,7 @@ func writeMarkdownReport(path string, orderedFiles []fileGroup, ctx *reportConte
 		lines = append(lines, fmt.Sprintf("| passed | %s |", comma(sndPassed)))
 		lines = append(lines, fmt.Sprintf("| failed | %s |", comma(sndFailed)))
 		lines = append(lines, fmt.Sprintf("| error | %s |", comma(sndErrors)))
-		lines = append(lines, fmt.Sprintf("| skipped | %s |", comma(sndSkipped)))
+		lines = append(lines, fmt.Sprintf("| skipped | %s |", comma(sndSkippedCount)))
 		if len(sndSkipped) > 0 {
 			lines = append(lines, fmt.Sprintf("| 黑名单跳过 | %s |", comma(len(sndSkipped))))
 		}
