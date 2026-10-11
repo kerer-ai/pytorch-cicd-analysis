@@ -65,9 +65,12 @@ func TestCategorizeEngineParity(t *testing.T) {
 		{"attribute missing", "AttributeError: 'Tensor' object has no attribute 'foo'", "其他-属性缺失"},
 		{"index out of range", "IndexError: index 5 is out of bounds for dim 0 with size 3", "其他-索引/维度越界"},
 		{"keyerror", "KeyError: 'foo'", "其他-KeyError"},
-		{"flex_attention module missing", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nModuleNotFoundError: No module named 'torch._inductor.kernel.flex_attention'", "其他-Inductor编译错误-flex_attention缺失"},
+		{"flex_attention module missing", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nModuleNotFoundError: No module named 'torch._inductor.kernel.flex_attention'", "Inductor编译错误-flex_attention缺失"},
 		{"sigabrt crash", "Worker killed by signal (SIGABRT)", "进程崩溃(SIGABRT)"},
 		{"no testcase in xml", "No testcase in XML", "运行收集缺失"},
+		{"inductor codegen npu init", "RuntimeError: Device npu not supported", "Inductor编译错误-codegen 初始化缺 npu"},
+		{"inductor scheduling missing", "RuntimeError: no scheduling registered for device npu", "Inductor编译错误-调度注册缺失"},
+		{"inductor keyerror npu", "KeyError: 'npu'", "Inductor编译错误-查表缺键"},
 	}
 
 	for _, tc := range cases {

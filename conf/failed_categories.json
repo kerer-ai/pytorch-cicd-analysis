@@ -191,10 +191,22 @@
       "root_cause": "## 七、处理建议\n\n1. **优先屏蔽**：这些是 torchvision / ONNX 量化模型在 CPU 上的用例，在 NPU 环境里本不参与 NPU 能力验证，建议统一屏蔽，屏蔽原因标注「量化 CPU 引擎在鲲鹏 ARM 下不支持，非 NPU 问题」。\n2. 若确需在 CPU 跑通，需给 torch 编译/启用 ARM 可用的量化 engine（oneDNN ARM 或 QNNPACK），但这与 NPU 用例分析无关。\n3. 不建议按算子树形排查：报错点虽在 `conv2d_prepack`，但根因是 engine 缺失，逐算子看会浪费精力。"
     },
     {
-      "name": "其他-Inductor编译错误",
+      "name": "Inductor编译错误",
       "rules": [
-        {"keyword": "Device npu not supported", "root_cause": "inductor wrapper 代码生成不识别 npu 设备"},
-        {"keyword": "no scheduling registered for device npu", "root_cause": "inductor 无 npu 调度注册（reduction 算子触发）"}
+        {"keyword": "Device npu not supported"},
+        {"keyword": "no scheduling registered for device npu"},
+        {"keyword": "KeyError: 'npu'"},
+        {"keyword": "InductorError"},
+        {"keyword": "failed to import /tmp/torchinductor"},
+        {"keyword": "expected to find"},
+        {"keyword": "torchinductor_root"},
+        {"all_keywords": ["no module named", "torch._inductor.kernel.flex_attention"]}
+      ],
+      "subcategories": [
+        {"name": "Inductor编译错误-codegen 初始化缺 npu", "keyword": "Device npu not supported", "root_cause": "inductor wrapper 代码生成不识别 npu 设备"},
+        {"name": "Inductor编译错误-调度注册缺失", "keyword": "no scheduling registered", "root_cause": "inductor 无 npu 调度注册（reduction 算子触发）"},
+        {"name": "Inductor编译错误-查表缺键", "keyword": "KeyError: 'npu'"},
+        {"name": "Inductor编译错误-flex_attention缺失", "keyword": "torch._inductor.kernel.flex_attention", "root_cause": "inductor 编译期导入 torch._inductor.kernel.flex_attention 模块失败（模块缺失），属 inductor 编译问题"}
       ]
     },
     {
@@ -248,12 +260,10 @@
       {"name": "其他-FX图序列化失败", "keywords_any": ["graph_pickler", "MissingOperators", "missing lowering"]},
       {"name": "其他-索引/维度越界", "keywords_any": ["index out of range", "dimension out of range", "out of range", "dimension specified as", "IndexError"]},
       {"name": "其他-导入错误", "keywords_any": ["cannot import name", "ImportError"]},
-      {"name": "其他-Inductor编译错误-flex_attention缺失", "keywords_all": ["no module named", "torch._inductor.kernel.flex_attention"], "root_cause": "inductor 编译期导入 torch._inductor.kernel.flex_attention 模块失败（模块缺失），属 inductor 编译问题，非 Dynamo 不支持"},
       {"name": "其他-Dynamo不支持", "keywords_any": ["BackendCompilerFailed"], "keywords_all_alt": ["_dynamo", "unsupported"]},
       {"name": "其他-进程异常退出", "regex": "process \\d+ exited with error code"},
       {"name": "进程崩溃(SIGABRT)", "keywords_all": ["killed by signal", "SIGABRT"]},
       {"name": "其他-测试签名问题", "keyword": "missing", "keyword_required": "required positional argument"},
-      {"name": "其他-Inductor编译错误", "keywords_any": ["InductorError", "failed to import /tmp/torchinductor", "expected to find", "torchinductor_root"]},
       {"name": "其他-comparing断言", "regex": "^comparing"},
       {"name": "其他-ValueError类型转换", "keyword": "cannot be safely cast to type"},
       {"name": "其他-_refs不支持", "keyword": "no _refs support for"},
