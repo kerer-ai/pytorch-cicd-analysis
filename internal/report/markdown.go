@@ -14,7 +14,7 @@ import (
 // 标题「# 测试报告」+ 总体概览/执行结果分布/失败用例分类/黑名单用例统计 四章。
 // 总体概览按 all_testcases.xlsx 拆分 sheet 名（= summary 模板 sheet）分组统计。
 // 计数收集按首现顺序，排序用稳定降序（对齐 Python Counter 首现序 + sorted 稳定性）。
-func writeMarkdownReport(path string, orderedFiles []fileGroup, ctx *reportContext, failedCatCounts []countKV, skipped []*models.SkippedCase) error {
+func writeMarkdownReport(path string, orderedFiles []fileGroup, ctx *reportContext, failedCatCounts []countKV, skipped []*models.SkippedCase, sndFiles []fileGroup) error {
 	type sheetStat struct {
 		total       int
 		passed      int
@@ -175,6 +175,38 @@ func writeMarkdownReport(path string, orderedFiles []fileGroup, ctx *reportConte
 			}
 			lines = append(lines, "")
 		}
+	}
+
+	// ShouldNotDo 用例总结：已从 all_testcases / failed_testcases 排除，单独输出
+	if len(sndFiles) > 0 {
+		var sndTotal, sndPassed, sndFailed, sndErrors, sndSkipped int
+		for _, fg := range sndFiles {
+			for _, tc := range fg.cases {
+				sndTotal++
+				switch tc.Status {
+				case "passed":
+					sndPassed++
+				case "failed":
+					sndFailed++
+				case "error":
+					sndErrors++
+				case "skipped":
+					sndSkipped++
+				}
+			}
+		}
+		lines = append(lines, "## Should Not Do 用例（已单独输出）", "")
+		lines = append(lines, "| 指标 | 数值 |")
+		lines = append(lines, "|---|---:|")
+		lines = append(lines, fmt.Sprintf("| 文件数 | %s |", comma(len(sndFiles))))
+		lines = append(lines, fmt.Sprintf("| 用例总数 | %s |", comma(sndTotal)))
+		lines = append(lines, fmt.Sprintf("| passed | %s |", comma(sndPassed)))
+		lines = append(lines, fmt.Sprintf("| failed | %s |", comma(sndFailed)))
+		lines = append(lines, fmt.Sprintf("| error | %s |", comma(sndErrors)))
+		lines = append(lines, fmt.Sprintf("| skipped | %s |", comma(sndSkipped)))
+		lines = append(lines, "")
+		lines = append(lines, "> 以上用例的源文件 Priority 为「Should Not Do」，已从 all_testcases / failed_testcases 中排除，详见 `ShouldNotDo_TestCases.xlsx`。")
+		lines = append(lines, "")
 	}
 
 	content := strings.Join(lines, "\n")

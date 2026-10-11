@@ -171,3 +171,44 @@ func EffectiveMaps(tmpl *SummaryTemplate, fileResults []*models.TestFileResult) 
 	}
 	return effFile, effSheet
 }
+
+// BuildShouldNotDoSet 返回 File→是否应忽略的集合：遍历非 README sheet，
+// 取 C 列（File）与 E 列（Priority），Priority 值为 "Should Not Do" 的文件
+// 标记为应忽略。这些文件的用例不进入 all_testcases / failed_testcases，
+// 单独输出到 ShouldNotDo_TestCases.xlsx。
+func BuildShouldNotDoSet(tmpl *SummaryTemplate) map[string]bool {
+	set := map[string]bool{}
+	if tmpl == nil {
+		return set
+	}
+	for _, entry := range tmpl.Sheets {
+		if entry.Name == "README" || entry.Name == "README(Bak)" {
+			continue
+		}
+		files := map[int]string{}
+		priority := map[int]string{}
+		for ref, cell := range entry.Sheet.Cells {
+			col, row := splitCellRef(ref)
+			if col == "" || row < 2 {
+				continue
+			}
+			s, _ := cell.Value.(string)
+			switch col {
+			case "C":
+				if s != "" {
+					files[row] = s
+				}
+			case "E":
+				if s != "" {
+					priority[row] = s
+				}
+			}
+		}
+		for row, f := range files {
+			if strings.TrimSpace(priority[row]) == "Should Not Do" {
+				set[f] = true
+			}
+		}
+	}
+	return set
+}

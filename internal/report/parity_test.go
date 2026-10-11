@@ -45,8 +45,8 @@ func TestParityWithPythonReference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateReports: %v", err)
 	}
-	if result.FileCount != 6 {
-		t.Errorf("expected 6 files, got %d", result.FileCount)
+	if result.FileCount != 7 {
+		t.Errorf("expected 7 files, got %d", result.FileCount)
 	}
 	workDir = filepath.Dir(result.ZipPath)
 

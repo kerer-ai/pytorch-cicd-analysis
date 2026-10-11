@@ -62,6 +62,13 @@ func main() {
 		fatal(err)
 	}
 
+	// summary 模板：优先从 Google Sheets 实时下载；失败时回退到嵌入式模板（conf.FS）。
+	if tmpl, err := report.LoadSummaryTemplateFromGoogle(); err == nil {
+		in.SummaryTemplate = tmpl
+	} else {
+		fmt.Fprintf(os.Stderr, "reportgen: warning: fetch summary template from Google failed (%v), using embedded fallback\n", err)
+	}
+
 	result, err := report.GenerateReports(*in, *outDir, conf.FS)
 	if err != nil {
 		fatal(fmt.Errorf("generate reports: %w", err))

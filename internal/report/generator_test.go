@@ -104,7 +104,7 @@ func TestGenerateReportsProducesZip(t *testing.T) {
 
 	zipBytes, _ := os.ReadFile(zipPath)
 	wantFiles := []string{
-		"all_testcases.xlsx", "failed_testcases.xlsx", "summary_report.xlsx",
+		"all_testcases.xlsx", "failed_testcases.xlsx", "ShouldNotDo_TestCases.xlsx", "summary_report.xlsx",
 		"all_testcases_report.md", "disabled_testcases.json", "running_skiped_testcases.json",
 	}
 	for _, name := range wantFiles {
@@ -758,8 +758,8 @@ func TestGenerateWithRealConf(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateReports with real conf: %v", err)
 	}
-	if result.FileCount != 6 {
-		t.Errorf("expected 6 files, got %d", result.FileCount)
+	if result.FileCount != 7 {
+		t.Errorf("expected 7 files, got %d", result.FileCount)
 	}
 	if result.TotalSize <= 0 {
 		t.Error("total size should be > 0")

@@ -122,13 +122,13 @@ func TestGenerateReportsEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateReports: %v", err)
 	}
-	if result.FileCount != 6 {
-		t.Fatalf("fileCount = %d, want 6", result.FileCount)
+	if result.FileCount != 7 {
+		t.Fatalf("fileCount = %d, want 7", result.FileCount)
 	}
 	workDir := filepath.Dir(result.ZipPath)
 	for _, name := range []string{
 		"report.zip", "all_testcases.xlsx", "failed_testcases.xlsx",
-		"summary_report.xlsx", "all_testcases_report.md",
+		"ShouldNotDo_TestCases.xlsx", "summary_report.xlsx", "all_testcases_report.md",
 		"disabled_testcases.json", "running_skiped_testcases.json",
 	} {
 		if _, err := os.Stat(filepath.Join(workDir, name)); err != nil {

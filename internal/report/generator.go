@@ -30,6 +30,9 @@ type Input struct {
 	Cases       []*models.TestCase
 	FileResults []*models.TestFileResult
 	Skipped     []*models.SkippedCase
+	// SummaryTemplate 为运行时 Obtain 的 summary 模板（Google Sheets 实时下载结果）。
+	// 为 nil 时回退到从 confFS 加载本地 _summary_template_data.json。
+	SummaryTemplate *SummaryTemplate
 	// ComparisonPrecollect 为文件级预收集对比数（公共/仅CPU/仅NPU），
 	// 来自采集制品 {分类}_cases_by_file.jsonl 动态统计。
 	ComparisonPrecollect map[string]models.FileComparisonCounts
@@ -98,15 +101,22 @@ func GenerateReports(in Input, outDir string, confFS fs.FS) (*ReportResult, erro
 	}
 
 	var ops []string
-	var summaryTemplate *SummaryTemplate
 	if confFS != nil {
 		ops, _ = LoadOpsFS(confFS, opsName)
-		summaryTemplate, err = LoadSummaryTemplateFS(confFS, summaryTemplateName)
-	} else {
-		summaryTemplate, err = LoadSummaryTemplateFS(os.DirFS("."), summaryTemplateName)
 	}
-	if err != nil {
-		return nil, fmt.Errorf("load summary template: %w", err)
+
+	// summary 模板：优先使用运行时下载的 Google 模板（in.SummaryTemplate），
+	// 未提供时回退到本地 _summary_template_data.json（测试/离线场景）。
+	summaryTemplate := in.SummaryTemplate
+	if summaryTemplate == nil {
+		if confFS != nil {
+			summaryTemplate, err = LoadSummaryTemplateFS(confFS, summaryTemplateName)
+		} else {
+			summaryTemplate, err = LoadSummaryTemplateFS(os.DirFS("."), summaryTemplateName)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("load summary template: %w", err)
+		}
 	}
 
 	// 有效映射：all_files 语义（FileResults 文件 × 模板分类，其余 Other）
@@ -120,30 +130,39 @@ func GenerateReports(in Input, outDir string, confFS fs.FS) (*ReportResult, erro
 	}
 
 	orderedFiles := buildOrderedFiles(in.Cases)
+	shouldNotDo := BuildShouldNotDoSet(summaryTemplate)
+	normalFiles, sndFiles := partitionShouldNotDo(orderedFiles, shouldNotDo)
 
-	outputFiles := make([]string, 0, 6)
+	outputFiles := make([]string, 0, 7)
 
 	f1 := filepath.Join(workDir, "all_testcases.xlsx")
-	if err := writeAllTestcases(f1, orderedFiles, ctx, in.FileResults, in.Skipped); err != nil {
+	if err := writeAllTestcases(f1, normalFiles, ctx, in.FileResults, in.Skipped); err != nil {
 		return nil, fmt.Errorf("all_testcases: %w", err)
 	}
 	outputFiles = append(outputFiles, f1)
 
 	f2 := filepath.Join(workDir, "failed_testcases.xlsx")
-	failedCatCounts, err := writeFailedTestcases(f2, orderedFiles, ctx, cat)
+	failedCatCounts, err := writeFailedTestcases(f2, normalFiles, ctx, cat)
 	if err != nil {
 		return nil, fmt.Errorf("failed_testcases: %w", err)
 	}
 	outputFiles = append(outputFiles, f2)
 
+	// ShouldNotDo（Priority 为 "Should Not Do"）文件的用例单独输出
+	f3 := filepath.Join(workDir, "ShouldNotDo_TestCases.xlsx")
+	if err := writeShouldNotDoTestcases(f3, sndFiles, ctx); err != nil {
+		return nil, fmt.Errorf("should-not-do testcases: %w", err)
+	}
+	outputFiles = append(outputFiles, f3)
+
 	f4 := filepath.Join(workDir, "summary_report.xlsx")
-	if err := writeSummaryReport(f4, summaryTemplate, orderedFiles); err != nil {
+	if err := writeSummaryReport(f4, summaryTemplate); err != nil {
 		return nil, fmt.Errorf("summary_report: %w", err)
 	}
 	outputFiles = append(outputFiles, f4)
 
 	f5 := filepath.Join(workDir, "all_testcases_report.md")
-	if err := writeMarkdownReport(f5, orderedFiles, ctx, failedCatCounts, in.Skipped); err != nil {
+	if err := writeMarkdownReport(f5, normalFiles, ctx, failedCatCounts, in.Skipped, sndFiles); err != nil {
 		return nil, fmt.Errorf("markdown: %w", err)
 	}
 	outputFiles = append(outputFiles, f5)
@@ -645,6 +664,40 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 		writeFailedSheet(safeSheetName(key), grouped[key])
 	}
 	return counts, f.SaveAs(path)
+}
+
+// partitionShouldNotDo 将文件组按是否命中 ShouldNotDo 集合切分。
+func partitionShouldNotDo(files []fileGroup, shouldNotDo map[string]bool) (normal, excluded []fileGroup) {
+	for _, fg := range files {
+		if shouldNotDo[fg.path] {
+			excluded = append(excluded, fg)
+		} else {
+			normal = append(normal, fg)
+		}
+	}
+	return normal, excluded
+}
+
+// writeShouldNotDoTestcases 将 ShouldNotDo 文件的用例单独输出（含全部状态，单 sheet），
+// 列结构与 all_testcases 一致。
+func writeShouldNotDoTestcases(path string, orderedFiles []fileGroup, ctx *reportContext) error {
+	f := excelize.NewFile()
+	styles := newReportStyles(f)
+
+	records := buildAllRecords(orderedFiles, ctx)
+
+	f.SetSheetName("Sheet1", "ShouldNotDo")
+	writeHeader(f, "ShouldNotDo", allTestcasesHeaders, styles.HeaderFont)
+	for i, w := range allTestcasesWidths {
+		f.SetColWidth("ShouldNotDo", colLetter(i), colLetter(i), w)
+	}
+	row := 2
+	for _, r := range records {
+		writeTestcaseRow(f, "ShouldNotDo", row, r, styles)
+		row++
+	}
+	setGeneratedDimension(f, "ShouldNotDo", len(allTestcasesHeaders)-1, row-1)
+	return f.SaveAs(path)
 }
 
 type disabledEntry struct {

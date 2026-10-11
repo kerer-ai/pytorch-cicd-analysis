@@ -93,9 +93,6 @@ func LoadSummaryTemplateFS(fsys fs.FS, name string) (*SummaryTemplate, error) {
 	return &t, nil
 }
 
-// summaryStatsSheets 是需要填充 K-O 运行时统计的 sheet（排除 README 类）。
-var summaryStatsSheets = []string{"Core", "Tensor", "Distributed", "Graph", "Math", "Quantization", "Utils"}
-
 func stripAlphaColor(c string) string {
 	if len(c) == 8 {
 		return c[2:]
@@ -125,9 +122,7 @@ func setSummaryCellValue(f *excelize.File, sheet, ref string, v interface{}) {
 	}
 }
 
-func writeSummaryReport(path string, tmpl *SummaryTemplate, orderedFiles []fileGroup) error {
-	fileStats := computeFileStats(orderedFiles)
-
+func writeSummaryReport(path string, tmpl *SummaryTemplate) error {
 	f := excelize.NewFile()
 	styleCache := map[string]int{}
 
@@ -164,89 +159,7 @@ func writeSummaryReport(path string, tmpl *SummaryTemplate, orderedFiles []fileG
 		}
 	}
 
-	fillSummaryStats(f, tmpl, fileStats, &styleCache)
-
 	return f.SaveAs(path)
-}
-
-// computeFileStats 按 file 统计：failed 仅计 status=="failed"（error 不计入 N 列，
-// 对齐 Python fill_summary_stats 的 file_stats 语义）。
-func computeFileStats(orderedFiles []fileGroup) map[string]fileStat {
-	stats := make(map[string]fileStat, len(orderedFiles))
-	for _, fg := range orderedFiles {
-		s := fileStat{}
-		for _, tc := range fg.cases {
-			s.total++
-			switch tc.Status {
-			case "passed":
-				s.passed++
-			case "failed":
-				s.failed++
-			case "skipped":
-				s.skipped++
-			}
-		}
-		stats[fg.path] = s
-	}
-	return stats
-}
-
-type fileStat struct {
-	total, passed, failed, skipped int
-}
-
-func fillSummaryStats(f *excelize.File, tmpl *SummaryTemplate, fileStats map[string]fileStat, styleCache *map[string]int) {
-	byName := map[string]*SummarySheetEntry{}
-	for i := range tmpl.Sheets {
-		byName[tmpl.Sheets[i].Name] = &tmpl.Sheets[i]
-	}
-
-	for _, sheetName := range summaryStatsSheets {
-		entry, ok := byName[sheetName]
-		if !ok {
-			continue
-		}
-		for ref, cell := range entry.Sheet.Cells {
-			col, row := splitCellRef(ref)
-			if col != "C" || row < 2 {
-				continue
-			}
-			fpath, _ := cell.Value.(string)
-			if fpath == "" {
-				continue
-			}
-			stat, ok := fileStats[fpath]
-			if !ok {
-				continue
-			}
-			successRate := "0.0%"
-			if stat.total > 0 {
-				successRate = fmt.Sprintf("%.1f%%", float64(stat.passed+stat.skipped)/float64(stat.total)*100)
-			}
-			f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), stat.total)
-			f.SetCellValue(sheetName, fmt.Sprintf("L%d", row), successRate)
-			f.SetCellValue(sheetName, fmt.Sprintf("M%d", row), stat.passed)
-			f.SetCellValue(sheetName, fmt.Sprintf("N%d", row), stat.failed)
-			f.SetCellValue(sheetName, fmt.Sprintf("O%d", row), stat.skipped)
-
-			for _, colLetter := range []string{"K", "L", "M", "N", "O"} {
-				cellRef := fmt.Sprintf("%s%d", colLetter, row)
-				f.SetCellStyle(sheetName, cellRef, cellRef, summaryCenterStyle(f, styleCache))
-			}
-		}
-	}
-}
-
-func summaryCenterStyle(f *excelize.File, cache *map[string]int) int {
-	const key = "center"
-	if id, ok := (*cache)[key]; ok {
-		return id
-	}
-	id, _ := f.NewStyle(&excelize.Style{
-		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
-	})
-	(*cache)[key] = id
-	return id
 }
 
 func summaryCellStyle(f *excelize.File, cache *map[string]int, cell SummaryCell) int {
