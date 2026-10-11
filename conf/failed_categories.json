@@ -248,8 +248,10 @@
       {"name": "其他-FX图序列化失败", "keywords_any": ["graph_pickler", "MissingOperators", "missing lowering"]},
       {"name": "其他-索引/维度越界", "keywords_any": ["index out of range", "dimension out of range", "out of range", "dimension specified as", "IndexError"]},
       {"name": "其他-导入错误", "keywords_any": ["cannot import name", "ImportError"]},
+      {"name": "其他-Inductor编译错误-flex_attention缺失", "keywords_all": ["no module named", "torch._inductor.kernel.flex_attention"], "root_cause": "inductor 编译期导入 torch._inductor.kernel.flex_attention 模块失败（模块缺失），属 inductor 编译问题，非 Dynamo 不支持"},
       {"name": "其他-Dynamo不支持", "keywords_any": ["BackendCompilerFailed"], "keywords_all_alt": ["_dynamo", "unsupported"]},
       {"name": "其他-进程异常退出", "regex": "process \\d+ exited with error code"},
+      {"name": "进程崩溃(SIGABRT)", "keywords_all": ["killed by signal", "SIGABRT"]},
       {"name": "其他-测试签名问题", "keyword": "missing", "keyword_required": "required positional argument"},
       {"name": "其他-Inductor编译错误", "keywords_any": ["InductorError", "failed to import /tmp/torchinductor", "expected to find", "torchinductor_root"]},
       {"name": "其他-comparing断言", "regex": "^comparing"},
@@ -259,7 +261,8 @@
       {"name": "其他-维度扩展不匹配", "keyword": "the expanded size of the tensor"},
       {"name": "其他-step必须非零", "keyword": "step must be nonzero"},
       {"name": "其他-Tracing tensor取值", "keyword": "trying to get value out of a tracing tensor"},
-      {"name": "其他-KeyError", "keyword": "KeyError"}
+      {"name": "其他-KeyError", "keyword": "KeyError"},
+      {"name": "运行收集缺失", "keyword": "No testcase in XML"}
     ],
     "default": {"name": "其他-未归类"}
   }
