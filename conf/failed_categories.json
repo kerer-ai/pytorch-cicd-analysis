@@ -191,6 +191,61 @@
       "root_cause": "## 七、处理建议\n\n1. **优先屏蔽**：这些是 torchvision / ONNX 量化模型在 CPU 上的用例，在 NPU 环境里本不参与 NPU 能力验证，建议统一屏蔽，屏蔽原因标注「量化 CPU 引擎在鲲鹏 ARM 下不支持，非 NPU 问题」。\n2. 若确需在 CPU 跑通，需给 torch 编译/启用 ARM 可用的量化 engine（oneDNN ARM 或 QNNPACK），但这与 NPU 用例分析无关。\n3. 不建议按算子树形排查：报错点虽在 `conv2d_prepack`，但根因是 engine 缺失，逐算子看会浪费精力。"
     },
     {
+      "name": "codegen-API 不匹配 (cpp_stdlib)",
+      "rules": [
+        {"keyword": "get_cpp_torch_device_options() got an unexpected keyword argument"}
+      ]
+    },
+    {
+      "name": "codegen-API 不匹配 (strict_reduction)",
+      "rules": [
+        {"keyword": "make_reduction() got an unexpected keyword argument"}
+      ]
+    },
+    {
+      "name": "子进程 force_fallback 断言",
+      "rules": [
+        {"all_keywords": ["Only OpOverload", "to make the clean up easier"]}
+      ]
+    },
+    {
+      "name": "Triton/C++ 编译失败",
+      "rules": [
+        {"all_keywords": ["No valid triton configs", "Failed to compile"]}
+      ]
+    },
+    {
+      "name": "NPU 调度器缺属性",
+      "rules": [
+        {"keyword": "object has no attribute '_nv_universal_gemm_scheduling'"}
+      ]
+    },
+    {
+      "name": "Inductor编译问题-npu_backend 配置缺失",
+      "rules": [
+        {"keyword": "torch._inductor.config.npu_backend does not exist"}
+      ]
+    },
+    {
+      "name": "断言失败-数值精度不匹配",
+      "rules": [
+        {"regex": "Scalars are not (equal|close)"}
+      ]
+    },
+    {
+      "name": "decomposition 缺失/冲突",
+      "rules": [
+        {"keyword": "make_fallback"},
+        {"keyword": "MissingOperatorWithDecomp"}
+      ]
+    },
+    {
+      "name": "Inductor问题-tuned_addmm 参数不匹配",
+      "rules": [
+        {"keyword": "tuned_addmm"}
+      ]
+    },
+    {
       "name": "Inductor编译错误",
       "rules": [
         {"keyword": "Device npu not supported"},

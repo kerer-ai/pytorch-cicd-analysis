@@ -25,8 +25,8 @@ func TestCategorizerCompile(t *testing.T) {
 	if len(c.categories) == 0 {
 		t.Fatal("expected categories loaded")
 	}
-	if len(c.categories) != 21 {
-		t.Errorf("expected 21 main categories, got %d", len(c.categories))
+	if len(c.categories) != 30 {
+		t.Errorf("expected 30 main categories, got %d", len(c.categories))
 	}
 	for _, cat := range c.categories {
 		for _, r := range cat.Rules {
@@ -71,6 +71,16 @@ func TestCategorizeEngineParity(t *testing.T) {
 		{"inductor codegen npu init", "RuntimeError: Device npu not supported", "Inductor编译错误-codegen 初始化缺 npu"},
 		{"inductor scheduling missing", "RuntimeError: no scheduling registered for device npu", "Inductor编译错误-调度注册缺失"},
 		{"inductor keyerror npu", "KeyError: 'npu'", "Inductor编译错误-查表缺键"},
+		{"codegen cpp stdlib api mismatch", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nTypeError: get_cpp_torch_device_options() got an unexpected keyword argument 'device_type'", "codegen-API 不匹配 (cpp_stdlib)"},
+		{"codegen strict reduction api mismatch", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nTypeError: make_reduction() got an unexpected keyword argument 'device_type'", "codegen-API 不匹配 (strict_reduction)"},
+		{"subprocess force_fallback assertion", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nAssertionError: Only OpOverload (and not OpOverloadPacket) should be used in the graph, to make the clean up easier", "子进程 force_fallback 断言"},
+		{"triton cpp compile failure", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nNo valid triton configs.\nRuntimeError: Failed to compile the generated C++ code", "Triton/C++ 编译失败"},
+		{"npu scheduler missing attribute", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nAttributeError: 'Scheduler' object has no attribute '_nv_universal_gemm_scheduling'", "NPU 调度器缺属性"},
+		{"inductor npu_backend config missing", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nRuntimeError: torch._inductor.config.npu_backend does not exist", "Inductor编译问题-npu_backend 配置缺失"},
+		{"scalars not equal precision", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nAssertionError: Scalars are not equal!", "断言失败-数值精度不匹配"},
+		{"decomposition make_fallback", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nRuntimeError: make_fallback for aten.unsupported_op", "decomposition 缺失/冲突"},
+		{"decomposition missing operator with decomp", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nMissingOperatorWithDecomp: aten.unsupported_op", "decomposition 缺失/冲突"},
+		{"inductor tuned_addmm param mismatch", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nTypeError: tuned_addmm() got an unexpected keyword argument 'beta'", "Inductor问题-tuned_addmm 参数不匹配"},
 	}
 
 	for _, tc := range cases {
