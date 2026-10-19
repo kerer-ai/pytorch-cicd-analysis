@@ -83,6 +83,7 @@ func TestCategorizeEngineParity(t *testing.T) {
 		{"inductor tuned_addmm param mismatch", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nTypeError: tuned_addmm() got an unexpected keyword argument 'beta'", "Inductor问题-tuned_addmm 参数不匹配"},
 		{"npu sparse csr incomplete", "RuntimeError: expected col_indices to be a contiguous tensor per batch", "NPU sparse/CSR 稀疏算子实现不完整"},
 		{"npu sparse csr incomplete row", "RuntimeError: expected row_indices to be a contiguous tensor per batch", "NPU sparse/CSR 稀疏算子实现不完整"},
+		{"empty_strided hardcode", "RuntimeError: Could not run 'aten::empty_strided' with arguments from the 'privateuseone' backend", "device 硬编码-未解耦"},
 	}
 
 	for _, tc := range cases {

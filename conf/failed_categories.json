@@ -128,7 +128,8 @@
         {"keyword": "ERR01004"},
         {"keyword": "not in libopapi.so"},
         {"keyword": "NotImplementedError"}
-      ]
+      ],
+      "exclude_keywords": ["aten::empty_strided"]
     },
     {
       "name": "NPU设备不支持",
@@ -274,7 +275,8 @@
     {
       "name": "device 硬编码-未解耦",
       "rules": [
-        {"keyword": "Unexpected device_type: npu", "root_cause": "消除硬编码，通过解耦可以解决"}
+        {"keyword": "Unexpected device_type: npu", "root_cause": "消除硬编码，通过解耦可以解决"},
+        {"regex": "Could not run 'aten::empty_strided' with arguments", "root_cause": "device 硬编码（backend 白名单未包含 npu/privateuseone），通过解耦可以解决"}
       ]
     },
     {
