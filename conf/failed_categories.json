@@ -79,6 +79,13 @@
       ]
     },
     {
+      "name": "NPU sparse/CSR 稀疏算子实现不完整",
+      "rules": [
+        {"regex": "expected \\w+ to be a contiguous tensor per batch"}
+      ],
+      "root_cause": "NPU sparse/CSR 稀疏算子实现不完整，类似实现是 fallback CPU"
+    },
+    {
       "name": "内存格式错误",
       "rules": [
         {"keyword": "Only c10::MemoryFormat::Contiguous is supported"},

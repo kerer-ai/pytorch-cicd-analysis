@@ -25,8 +25,8 @@ func TestCategorizerCompile(t *testing.T) {
 	if len(c.categories) == 0 {
 		t.Fatal("expected categories loaded")
 	}
-	if len(c.categories) != 30 {
-		t.Errorf("expected 30 main categories, got %d", len(c.categories))
+	if len(c.categories) != 31 {
+		t.Errorf("expected 31 main categories, got %d", len(c.categories))
 	}
 	for _, cat := range c.categories {
 		for _, r := range cat.Rules {
@@ -81,6 +81,8 @@ func TestCategorizeEngineParity(t *testing.T) {
 		{"decomposition make_fallback", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nRuntimeError: make_fallback for aten.unsupported_op", "decomposition 缺失/冲突"},
 		{"decomposition missing operator with decomp", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nMissingOperatorWithDecomp: aten.unsupported_op", "decomposition 缺失/冲突"},
 		{"inductor tuned_addmm param mismatch", "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nInductorError: compile error\nTypeError: tuned_addmm() got an unexpected keyword argument 'beta'", "Inductor问题-tuned_addmm 参数不匹配"},
+		{"npu sparse csr incomplete", "RuntimeError: expected col_indices to be a contiguous tensor per batch", "NPU sparse/CSR 稀疏算子实现不完整"},
+		{"npu sparse csr incomplete row", "RuntimeError: expected row_indices to be a contiguous tensor per batch", "NPU sparse/CSR 稀疏算子实现不完整"},
 	}
 
 	for _, tc := range cases {
