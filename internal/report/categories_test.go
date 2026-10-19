@@ -25,8 +25,8 @@ func TestCategorizerCompile(t *testing.T) {
 	if len(c.categories) == 0 {
 		t.Fatal("expected categories loaded")
 	}
-	if len(c.categories) != 31 {
-		t.Errorf("expected 31 main categories, got %d", len(c.categories))
+	if len(c.categories) != 32 {
+		t.Errorf("expected 32 main categories, got %d", len(c.categories))
 	}
 	for _, cat := range c.categories {
 		for _, r := range cat.Rules {
@@ -84,6 +84,7 @@ func TestCategorizeEngineParity(t *testing.T) {
 		{"npu sparse csr incomplete", "RuntimeError: expected col_indices to be a contiguous tensor per batch", "NPU sparse/CSR 稀疏算子实现不完整"},
 		{"npu sparse csr incomplete row", "RuntimeError: expected row_indices to be a contiguous tensor per batch", "NPU sparse/CSR 稀疏算子实现不完整"},
 		{"empty_strided hardcode", "RuntimeError: Could not run 'aten::empty_strided' with arguments from the 'privateuseone' backend", "device 硬编码-未解耦"},
+		{"aclnn constant pad nd zero element", "Exception: constant_pad_nd:third_party/op-plugin/op_plugin/ops/opapi/ConstantPadNdKernelNpuOpApi.cpp:85 NPU function error: call aclnnConstantPadNd failed, error code is 161002 [ERROR] ERR00100 PTA call acl api failed.", "PTA调用acl api失败-op仓0元素短路适配"},
 	}
 
 	for _, tc := range cases {

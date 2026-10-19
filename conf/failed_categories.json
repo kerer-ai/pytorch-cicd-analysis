@@ -12,6 +12,12 @@
 
   "categories": [
     {
+      "name": "PTA调用acl api失败-op仓0元素短路适配",
+      "rules": [
+        {"regex": "aclnn(ConstantPadNd|AdaptiveAvgPool3d|UnfoldGrad|Im2col)"}
+      ]
+    },
+    {
       "name": "PTA调用acl api失败",
       "rules": [
         {"keyword": "PTA call acl api failed"}
