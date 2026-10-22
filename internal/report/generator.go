@@ -571,6 +571,7 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 	}
 
 	var allRecords []rec
+	var opRecords []rec
 	grouped := map[string][]rec{}
 	for _, fg := range orderedFiles {
 		fc := classifyFile(ctx.fileMap, fg.path)
@@ -580,6 +581,17 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 			}
 			unsupported, _ := classifyCase(tc.Status, tc.Message, ctx.ops, ctx.unsupported)
 			if unsupported == "是" {
+				continue
+			}
+			// 算子命中（ops.txt）：分类依据=算子名；
+			// 「算子失败用例」sheet 的失败大类按算子名称分，
+			// all_failed/分组 sheet 的失败大类固定为「算子失败-SEG」。
+			if op := checkOpsInMessage(tc.Message, ctx.ops); op != "" {
+				opRecords = append(opRecords, rec{fc.Classification, fc.Specialization, fg.path, tc.NodeID, tc.Status, tc.Message, op, op, ""})
+				r := rec{fc.Classification, fc.Specialization, fg.path, tc.NodeID, tc.Status, tc.Message, "算子失败-SEG", op, ""}
+				allRecords = append(allRecords, r)
+				key := fc.Classification + "+" + fc.Specialization
+				grouped[key] = append(grouped[key], r)
 				continue
 			}
 			// Python classify_failed 从 all_testcases.xlsx 回读消息再分类，
@@ -653,7 +665,7 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 		}
 	}
 
-	if len(allRecords) == 0 && len(groupKeys) == 0 {
+	if len(allRecords) == 0 && len(groupKeys) == 0 && len(opRecords) == 0 {
 		f.SetSheetName("Sheet1", "all_failed")
 		writeFailedSheet("all_failed", nil)
 		return counts, f.SaveAs(path)
@@ -663,6 +675,9 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 	writeFailedSheet("all_failed", allRecords)
 	for _, key := range groupKeys {
 		writeFailedSheet(safeSheetName(key), grouped[key])
+	}
+	if len(opRecords) > 0 {
+		writeFailedSheet("算子失败用例", opRecords)
 	}
 	return counts, f.SaveAs(path)
 }
@@ -728,17 +743,10 @@ type runningEntry struct {
 }
 
 // writeBlacklistJSONs 生成 disabled_testcases.json / running_skiped_testcases.json，
-// 对齐 /tmp/20260909 parse_blacklist.py（Step4 按 skip_source 拆分 + Step5/5.5 从用例增量补充，
-// 增量 disabled 的算子名命中走 ops_match_category 兜底），键序 = 插入序。
+// 对齐 /tmp/20260909 parse_blacklist.py（Step4 按 skip_source 拆分 + Step5/5.5 从用例增量补充），
+// 键序 = 插入序。算子命中（ops.txt）不再增量写入 disabled（改入 failed_testcases 算子失败用例）。
 func writeBlacklistJSONs(disabledPath, runningPath string, orderedFiles []fileGroup, ctx *reportContext, skipped []*models.SkippedCase) error {
 	typeMap := ctx.unsupported.TypeMap()
-	opsCategory := ctx.unsupported.OpsMatchCategory()
-	opSet := map[string]bool{}
-	if opsCategory != "" {
-		for _, op := range ctx.ops {
-			opSet[op] = true
-		}
-	}
 
 	disabled := &orderedDisabledJSON{seen: map[string]bool{}, disabledVals: map[string]disabledEntry{}}
 	running := &orderedDisabledJSON{seen: map[string]bool{}, runningVals: map[string]runningEntry{}}
@@ -778,10 +786,6 @@ func writeBlacklistJSONs(disabledPath, runningPath string, orderedFiles []fileGr
 				_, reason := classifyCase(tc.Status, tc.Message, ctx.ops, ctx.unsupported)
 				if reason != "" && !disabled.seen[tc.NodeID] {
 					category := typeMap[strings.ToLower(reason)]
-					// 算子命中时（reason 为算子名），使用 ops_match_category 兜底
-					if category == "" && opSet[reason] {
-						category = opsCategory
-					}
 					disabled.seen[tc.NodeID] = true
 					disabled.keys = append(disabled.keys, tc.NodeID)
 					disabled.disabledVals[tc.NodeID] = disabledEntry{

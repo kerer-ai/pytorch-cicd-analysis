@@ -81,10 +81,10 @@ func TestClassifyCase(t *testing.T) {
 			t.Errorf("errors status should be ignored (python only failed/error), got %q %q", u, r)
 		}
 	})
-	t.Run("op in message", func(t *testing.T) {
+	t.Run("op in message not unsupported", func(t *testing.T) {
 		u, r := classifyCase("failed", "call aclnnAdd failed", ops, cfg)
-		if u != "是" || r != "aclnnAdd" {
-			t.Errorf("got %q %q", u, r)
+		if u != "" || r != "" {
+			t.Errorf("op hit should no longer be unsupported, got %q %q", u, r)
 		}
 	})
 	t.Run("pattern takes precedence over op", func(t *testing.T) {
@@ -99,6 +99,16 @@ func TestClassifyCase(t *testing.T) {
 			t.Errorf("expected empty, got %q", u)
 		}
 	})
+}
+
+func TestCheckOpsInMessage(t *testing.T) {
+	ops := []string{"aclnnAdd", "aclnnBatchNorm"}
+	if got := checkOpsInMessage("call aclnnAdd failed", ops); got != "aclnnAdd" {
+		t.Errorf("checkOpsInMessage = %q, want aclnnAdd", got)
+	}
+	if got := checkOpsInMessage("call aclnnFoo failed", ops); got != "" {
+		t.Errorf("checkOpsInMessage = %q, want empty", got)
+	}
 }
 
 func TestCheckRunningSkiped(t *testing.T) {

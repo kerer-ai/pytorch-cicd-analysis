@@ -31,16 +31,14 @@ func extractFirstLine(message string) string {
 }
 
 // classifyCase 返回 (isUnsupported, reason)，对齐 Python fill_cdef H/I 列：
-// 仅 failed/error 判定；unsupported 模式优先（大小写敏感），其次算子命中。
-func classifyCase(status, message string, ops []string, unsupported *UnsupportedConfig) (string, string) {
+// 仅 failed/error 判定；仅 unsupported 模式命中（大小写敏感）标记为不支持。
+// 算子命中（ops.txt）不再标记为不支持——改为在 failed_testcases 单独输出「算子失败用例」。
+func classifyCase(status, message string, _ []string, unsupported *UnsupportedConfig) (string, string) {
 	if status != "failed" && status != "error" {
 		return "", ""
 	}
 	if pattern := unsupported.checkUnsupportedPattern(message); pattern != "" {
 		return "是", pattern
-	}
-	if op := checkOpsInMessage(message, ops); op != "" {
-		return "是", op
 	}
 	return "", ""
 }

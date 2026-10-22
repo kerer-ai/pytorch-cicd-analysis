@@ -596,8 +596,8 @@ func TestBlacklistJSONOrderAndFormat(t *testing.T) {
 	}
 }
 
-// TestBlacklistIncrementalOpOnly 增量 disabled 须含 op 命中（非仅 pattern），
-// op-only 条目 category 走 ops_match_category 兜底（对齐 /tmp/20260909 UNSUPPORTED.json）。
+// TestBlacklistIncrementalOpOnly 算子命中（ops.txt）不再增量写入 disabled_testcases，
+// 而是单独进入 failed_testcases.xlsx 的「算子失败用例」sheet。
 func TestBlacklistIncrementalOpOnly(t *testing.T) {
 	in := testInput()
 	in.Skipped = nil
@@ -610,9 +610,57 @@ func TestBlacklistIncrementalOpOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	content := string(data)
-	if !strings.Contains(content, `"op_only.py::T::t": {"category": "cann not supported", "reason": "aclnnAdd", "issue": ""}`) {
-		t.Errorf("op-only incremental entry should exist with ops_match_category:\n%s", content)
+	if strings.Contains(string(data), "op_only.py::T::t") {
+		t.Errorf("op-hit case should NOT be in disabled_testcases.json:\n%s", data)
+	}
+
+	f, err := excelize.OpenFile(filepath.Join(workDir, "failed_testcases.xlsx"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	sheets := f.GetSheetList()
+	found := false
+	for _, s := range sheets {
+		if s == "算子失败用例" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("failed_testcases.xlsx should contain 算子失败用例 sheet, got %v", sheets)
+	}
+
+	rows, err := f.GetRows("算子失败用例")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) < 2 {
+		t.Fatalf("算子失败用例 should have 1 data row, got %v", rows)
+	}
+	if len(rows[1]) < 8 {
+		t.Fatalf("算子失败用例 row too short: %v", rows[1])
+	}
+	// 「算子失败用例」sheet：失败大类（F 列）按算子名称分 = aclnnAdd，分类依据（G 列）= 算子名
+	if rows[1][6] != "aclnnAdd" || rows[1][7] != "aclnnAdd" {
+		t.Errorf("算子失败用例 F/G = %q/%q, want aclnnAdd/aclnnAdd", rows[1][6], rows[1][7])
+	}
+
+	// all_failed 也应包含算子命中用例（失败大类=算子失败-SEG，分类依据=算子名）
+	allFailedRows, err := f.GetRows("all_failed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundOp := false
+	for _, row := range allFailedRows[1:] {
+		if len(row) >= 8 && row[6] == "算子失败-SEG" && row[7] == "aclnnAdd" {
+			foundOp = true
+			break
+		}
+	}
+	if !foundOp {
+		t.Errorf("all_failed should contain op-hit case with 失败大类=算子失败-SEG, rows=%v", allFailedRows)
 	}
 }
 

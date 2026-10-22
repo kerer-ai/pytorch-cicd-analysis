@@ -62,6 +62,7 @@ func writeMarkdownReport(path string, orderedFiles []fileGroup, ctx *reportConte
 	sort.Strings(sheetNames)
 
 	lines = append(lines, "## 总体概览", "")
+	lines = append(lines, "> 注：以下统计已排除 Priority 为「Should Not Do」的用例（详见文末「Should Not Do 用例」章节）。", "")
 	lines = append(lines, "| 分类 | 总用例 | passed | failed | errors | skipped | 通过率 |")
 	lines = append(lines, "|---|---:|---:|---:|---:|---:|---:|")
 	var sumTotal, sumPassed, sumFailed, sumErrors, sumSkipped int
