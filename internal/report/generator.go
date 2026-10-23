@@ -763,7 +763,7 @@ func writeBlacklistJSONs(disabledPath, runningPath string, orderedFiles []fileGr
 			running.seen[sc.NodeID] = true
 			running.keys = append(running.keys, sc.NodeID)
 			running.runningVals[sc.NodeID] = runningEntry{Reason: sc.SkipReason}
-		case "disabled_testcases.json":
+		case "disabled_testcases.json", "disable_testcases_a5_all":
 			if disabled.seen[sc.NodeID] {
 				continue
 			}
