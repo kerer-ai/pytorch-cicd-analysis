@@ -755,15 +755,18 @@ func writeBlacklistJSONs(disabledPath, runningPath string, orderedFiles []fileGr
 		if sc.NodeID == "" {
 			continue
 		}
-		switch sc.SkipSource {
-		case "running_skiped_testcases.json":
+		switch {
+		case sc.SkipSource == "running_skiped_testcases.json":
 			if running.seen[sc.NodeID] {
 				continue
 			}
 			running.seen[sc.NodeID] = true
 			running.keys = append(running.keys, sc.NodeID)
 			running.runningVals[sc.NodeID] = runningEntry{Reason: sc.SkipReason}
-		case "disabled_testcases.json", "disable_testcases_a5_all":
+		// disabled 来源：按 disable_testcases 模糊匹配，覆盖 disable_testcases_a3_all /
+		// disable_testcases_a5_all 等变体；同时保留标准值 disabled_testcases.json
+		// （拼写带 d，不包含 disable_testcases 子串，需单独精确保留）。
+		case strings.Contains(sc.SkipSource, "disable_testcases") || sc.SkipSource == "disabled_testcases.json":
 			if disabled.seen[sc.NodeID] {
 				continue
 			}
