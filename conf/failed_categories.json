@@ -321,6 +321,13 @@
       "rules": [
         {"keyword": "hit the vmap fallback which is currently disabled"}
       ]
+    },
+    {
+      "name": "decomposition精度偏差",
+      "rules": [
+        {"keyword": "Difference from float64 is larger with decomposition"}
+      ],
+      "root_cause": "torch 对部分算子的 decomposition 拆分在低精度（float16）下引入超 atol 的舍入误差"
     }
   ],
 
