@@ -87,7 +87,8 @@
     {
       "name": "NPU sparse/CSR 稀疏算子实现不完整",
       "rules": [
-        {"regex": "expected \\w+ to be a contiguous tensor per batch"}
+        {"regex": "expected \\w+ to be a contiguous tensor per batch"},
+        {"regex": "Could not run '[^']+' with arguments from the 'SparseCsr\\w+' backend"}
       ],
       "root_cause": "NPU sparse/CSR 稀疏算子实现不完整，类似实现是 fallback CPU"
     },
@@ -295,6 +296,12 @@
       "name": "序列化兼容性问题",
       "rules": [
         {"keyword": "_pickle.UnpicklingError: Unsupported global: GLOBAL torch.jit._pickle.restore_type_tag was not an allowed global by default", "root_cause": "- torch.load 默认 weights_only=True ，C++ torch::save 产物带 legacy type tag， restore_type_tag 不在默认白名单。\n- 修复方法 ：加载前 torch.serialization.add_safe_globals([torch.jit._pickle.restore_type_tag]) ，或 torch.load(path, weights_only=False) 。"}
+      ]
+    },
+    {
+      "name": "序列化兼容问题-weights_only",
+      "rules": [
+        {"keyword": "WeightsUnpickler error: Unsupported global"}
       ]
     },
     {
