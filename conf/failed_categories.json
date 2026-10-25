@@ -93,6 +93,12 @@
       "root_cause": "NPU sparse/CSR 稀疏算子实现不完整，类似实现是 fallback CPU"
     },
     {
+      "name": "SparseAdam 稀疏梯度状态不匹配",
+      "rules": [
+        {"regex": "The size of tensor a \\(\\d+\\) must match the size of tensor b \\(0\\) at non-singleton dimension \\d+"}
+      ]
+    },
+    {
       "name": "内存格式错误",
       "rules": [
         {"keyword": "Only c10::MemoryFormat::Contiguous is supported"},
@@ -309,6 +315,12 @@
       "rules": [
         {"regex": "Expected one of cpu, cuda,.*privateuseone device type at start of device string: openreg", "root_cause": "该设备没有注册 autocast 支持，_is_autocast_available 无法识别。"}
       ]
+    },
+    {
+      "name": "vmap batch rule缺失",
+      "rules": [
+        {"keyword": "hit the vmap fallback which is currently disabled"}
+      ]
     }
   ],
 
@@ -337,9 +349,13 @@
       {"name": "其他-FX图序列化失败", "keywords_any": ["graph_pickler", "MissingOperators", "missing lowering"]},
       {"name": "其他-索引/维度越界", "keywords_any": ["index out of range", "dimension out of range", "out of range", "dimension specified as", "IndexError"]},
       {"name": "其他-导入错误", "keywords_any": ["cannot import name", "ImportError"]},
+      {"name": "其他-caffe2模块缺失", "keyword": "No module named 'caffe2.python'"},
       {"name": "其他-Dynamo不支持", "keywords_any": ["BackendCompilerFailed"], "keywords_all_alt": ["_dynamo", "unsupported"]},
       {"name": "其他-进程异常退出", "regex": "process \\d+ exited with error code"},
       {"name": "进程崩溃(SIGABRT)", "keywords_all": ["killed by signal", "SIGABRT"]},
+      {"name": "进程崩溃(SIGSEGV)", "keywords_all": ["killed by signal", "SIGSEGV"]},
+      {"name": "分布式测试-子进程异常退出", "keywords_all": ["common_distributed.py", "Exited with 0"]},
+      {"name": "分布式测试-未适配NCCL/HCCL后端", "keyword": "Distributed package doesn't have NCCL built in"},
       {"name": "其他-测试签名问题", "keyword": "missing", "keyword_required": "required positional argument"},
       {"name": "其他-comparing断言", "regex": "^comparing"},
       {"name": "其他-ValueError类型转换", "keyword": "cannot be safely cast to type"},
