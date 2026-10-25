@@ -75,7 +75,8 @@
         {"regex": "Object comparison failed: torch\\.\\w+ != torch\\.\\w+"},
         {"regex": "dtype.*do not match"},
         {"keyword": "dtype mismatch"},
-        {"keyword": "Input data type should not be float64"}
+        {"keyword": "Input data type should not be float64"},
+        {"keyword": "expected dtype torch."}
       ]
     },
     {
@@ -140,7 +141,8 @@
         {"regex": "Could not run '[^']+' with arguments from the '\\w+' backend"},
         {"keyword": "ERR01004"},
         {"keyword": "not in libopapi.so"},
-        {"keyword": "NotImplementedError"}
+        {"keyword": "NotImplementedError"},
+        {"keyword": "is not currently supported on the NPU backend"}
       ],
       "exclude_keywords": ["aten::empty_strided"]
     },
@@ -361,6 +363,7 @@
       {"name": "其他-进程异常退出", "regex": "process \\d+ exited with error code"},
       {"name": "进程崩溃(SIGABRT)", "keywords_all": ["killed by signal", "SIGABRT"]},
       {"name": "进程崩溃(SIGSEGV)", "keywords_all": ["killed by signal", "SIGSEGV"]},
+      {"name": "进程崩溃(SIGFPE)", "keywords_all": ["killed by signal", "SIGFPE"]},
       {"name": "分布式测试-子进程异常退出", "keywords_all": ["common_distributed.py", "Exited with 0"]},
       {"name": "分布式测试-未适配NCCL/HCCL后端", "keyword": "Distributed package doesn't have NCCL built in"},
       {"name": "其他-测试签名问题", "keyword": "missing", "keyword_required": "required positional argument"},
@@ -372,6 +375,17 @@
       {"name": "其他-step必须非零", "keyword": "step must be nonzero"},
       {"name": "其他-Tracing tensor取值", "keyword": "trying to get value out of a tracing tensor"},
       {"name": "其他-KeyError", "keyword": "KeyError"},
+      {"name": "其他-AOTI CPU kernel生成失败", "keyword": "Failed to produce kernel library by using AOTI for CPU"},
+      {"name": "其他-triton依赖缺失", "keyword": "name 'triton' is not defined"},
+      {"name": "其他-CUDAGraph未实例化", "keyword": "Tried to instantiate dummy base class CUDAGraph"},
+      {"name": "其他-mat_b维度非连续", "keyword": "mat_b must be contiguous in first dim"},
+      {"name": "其他-TORCH_LIBRARY重复注册", "keyword": "Only a single TORCH_LIBRARY can be used"},
+      {"name": "其他-openreg后端无效", "keyword": "Invalid backend: 'openreg'"},
+      {"name": "其他-aclnn算子无实现", "keyword": "do not have aclnn implementation"},
+      {"name": "其他-量化qnnpack输入dtype不符", "keyword": "qnnpack"},
+      {"name": "其他-torch_shm_manager执行失败", "keyword": "torch_shm_manager"},
+      {"name": "其他-Dynamo数据依赖guard失败", "keyword": "Could not guard on data-dependent"},
+      {"name": "其他-测试fixture缺失", "keywords_all": ["fixture", "not found"]},
       {"name": "运行收集缺失", "keyword": "No testcase in XML"}
     ],
     "default": {"name": "其他-未归类"}
