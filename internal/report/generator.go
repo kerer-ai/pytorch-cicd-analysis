@@ -45,6 +45,7 @@ type reportContext struct {
 	fileMap                FileMap
 	sheetMap               map[string]string
 	comparisonPrecollect map[string]models.FileComparisonCounts
+	apiATen                []string
 	ops                    []string
 	unsupported            *UnsupportedConfig
 }
@@ -57,6 +58,7 @@ type ReportResult struct {
 
 const (
 	opsName              = "ops.txt"
+	apiATenName          = "api-ATen.xlsx"
 	summaryTemplateName  = "_summary_template_data.json"
 	categoriesConfigName = "failed_categories.json"
 	unsupportedName      = "UNSUPPORTED.json"
@@ -105,6 +107,11 @@ func GenerateReports(in Input, outDir string, confFS fs.FS) (*ReportResult, erro
 		ops, _ = LoadOpsFS(confFS, opsName)
 	}
 
+	var apiATen []string
+	if confFS != nil {
+		apiATen, _ = LoadAPIATenFS(confFS, apiATenName)
+	}
+
 	// summary 模板：优先使用运行时下载的 Google 模板（in.SummaryTemplate），
 	// 未提供时回退到本地 _summary_template_data.json（测试/离线场景）。
 	summaryTemplate := in.SummaryTemplate
@@ -125,6 +132,7 @@ func GenerateReports(in Input, outDir string, confFS fs.FS) (*ReportResult, erro
 		fileMap:                effFileMap,
 		sheetMap:               effSheetMap,
 		comparisonPrecollect: in.ComparisonPrecollect,
+		apiATen:                apiATen,
 		ops:                    ops,
 		unsupported:            unsupportedCfg,
 	}
@@ -581,6 +589,17 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 			}
 			unsupported, _ := classifyCase(tc.Status, tc.Message, ctx.ops, ctx.unsupported)
 			if unsupported == "是" {
+				continue
+			}
+			// api-ATen 未支持（优先级高于 ops.txt）：完全匹配（词边界），
+			// 「算子失败用例」sheet 写命中的 API/ATen 名，
+			// all_failed/分组 sheet 失败大类固定为「ATen未实现」。
+			if name := checkAPIATenInMessage(tc.Message, ctx.apiATen); name != "" {
+				opRecords = append(opRecords, rec{fc.Classification, fc.Specialization, fg.path, tc.NodeID, tc.Status, tc.Message, name, name, ""})
+				r := rec{fc.Classification, fc.Specialization, fg.path, tc.NodeID, tc.Status, tc.Message, "ATen未实现", name, ""}
+				allRecords = append(allRecords, r)
+				key := fc.Classification + "+" + fc.Specialization
+				grouped[key] = append(grouped[key], r)
 				continue
 			}
 			// 算子命中（ops.txt）：分类依据=算子名；

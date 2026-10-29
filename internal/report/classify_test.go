@@ -120,6 +120,30 @@ func TestCheckOpsInMessage(t *testing.T) {
 	}
 }
 
+func TestCheckAPIATenInMessage(t *testing.T) {
+	names := []string{"hypot", "hypot_", "Tensor.cauchy_"}
+	// 完全匹配：独立标识符命中。
+	if got := checkAPIATenInMessage("call hypot failed", names); got != "hypot" {
+		t.Errorf("checkAPIATenInMessage = %q, want hypot", got)
+	}
+	// 完全匹配：hypot 不应命中 hypotddd（子串前缀）。
+	if got := checkAPIATenInMessage("call hypotddd failed", names); got != "" {
+		t.Errorf("checkAPIATenInMessage = %q, want empty (not whole word)", got)
+	}
+	// 下划线结尾算子名作为独立标识符命中。
+	if got := checkAPIATenInMessage("call hypot_ failed", names); got != "hypot_" {
+		t.Errorf("checkAPIATenInMessage = %q, want hypot_", got)
+	}
+	// API 名含点号，完全匹配命中。
+	if got := checkAPIATenInMessage("Tensor.cauchy_ not supported", names); got != "Tensor.cauchy_" {
+		t.Errorf("checkAPIATenInMessage = %q, want Tensor.cauchy_", got)
+	}
+	// Tensor.cauchy_ 不应命中 Tensor.cauchy_x（尾部边界）。
+	if got := checkAPIATenInMessage("Tensor.cauchy_x not supported", names); got != "" {
+		t.Errorf("checkAPIATenInMessage = %q, want empty (not whole word)", got)
+	}
+}
+
 func TestCheckRunningSkiped(t *testing.T) {
 	cfg := testUnsupportedCfg(t)
 	if !cfg.checkRunningSkiped("Skipped: Only runs on cuda devices") {

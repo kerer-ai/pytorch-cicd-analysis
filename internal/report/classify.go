@@ -22,6 +22,52 @@ func checkOpsInMessage(message string, ops []string) string {
 	return best
 }
 
+// checkAPIATenInMessage 返回 message 中命中的 API/ATen 未支持名。
+// 与 ops.txt 的算子匹配（call <op> failed）不同，这里要求"完全匹配"：
+// 命中名必须作为独立标识符出现（前后均不是字母/数字/下划线），
+// 否则 hypot 会误命中 hypotddd；并取最长匹配以保证稳定。
+func checkAPIATenInMessage(message string, names []string) string {
+	if message == "" || len(names) == 0 {
+		return ""
+	}
+	var best string
+	for _, name := range names {
+		if len(name) > len(best) && wordBoundaryContains(message, name) {
+			best = name
+		}
+	}
+	return best
+}
+
+// wordBoundaryContains 判断 name 是否以"独立标识符"形式出现在 s 中：
+// 命中位置前后均不能是字母/数字/下划线，避免子串前缀误命中。
+func wordBoundaryContains(s, name string) bool {
+	if name == "" {
+		return false
+	}
+	start := 0
+	for {
+		idx := strings.Index(s[start:], name)
+		if idx < 0 {
+			return false
+		}
+		abs := start + idx
+		leftOK := abs == 0 || !isIdentChar(s[abs-1])
+		rightOK := abs+len(name) == len(s) || !isIdentChar(s[abs+len(name)])
+		if leftOK && rightOK {
+			return true
+		}
+		start = abs + 1
+	}
+}
+
+func isIdentChar(c byte) bool {
+	return c == '_' ||
+		(c >= '0' && c <= '9') ||
+		(c >= 'a' && c <= 'z') ||
+		(c >= 'A' && c <= 'Z')
+}
+
 // extractFirstLine 提取报错日志首行，对齐 Python message.split("\n")[0].strip()
 // （先取首行再 TrimSpace，不截断）。
 func extractFirstLine(message string) string {
