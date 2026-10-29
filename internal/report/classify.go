@@ -5,16 +5,21 @@ import (
 	"strings"
 )
 
+// checkOpsInMessage 返回 message 中真实调用失败的算子名。
+// 仅当日志包含 "call <op> failed" 形式（如 "call aclnnAdd failed"）才视为真实
+// 调用该算子，避免仅因日志提及算子名而误命中；并取最长匹配，避免短算子名
+// （如 aclnnAdd）抢先匹配到长算子名（如 aclnnAddmm）的前缀，无需依赖 ops.txt 排序。
 func checkOpsInMessage(message string, ops []string) string {
 	if message == "" || len(ops) == 0 {
 		return ""
 	}
+	var best string
 	for _, op := range ops {
-		if strings.Contains(message, op) {
-			return op
+		if len(op) > len(best) && strings.Contains(message, "call "+op+" failed") {
+			best = op
 		}
 	}
-	return ""
+	return best
 }
 
 // extractFirstLine 提取报错日志首行，对齐 Python message.split("\n")[0].strip()

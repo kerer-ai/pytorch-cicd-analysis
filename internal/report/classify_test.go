@@ -109,6 +109,15 @@ func TestCheckOpsInMessage(t *testing.T) {
 	if got := checkOpsInMessage("call aclnnFoo failed", ops); got != "" {
 		t.Errorf("checkOpsInMessage = %q, want empty", got)
 	}
+	// 非调用语境（仅提及算子名，未形成 "call <op> failed"）不应命中。
+	if got := checkOpsInMessage("not implemented for DT_COMPLEX while aclnnAdd running", ops); got != "" {
+		t.Errorf("checkOpsInMessage = %q, want empty (no call pattern)", got)
+	}
+	// 最长匹配：短名 aclnnAdd 在前也不应抢先命中长名 aclnnAddmm。
+	prefixOps := []string{"aclnnAdd", "aclnnAddmm"}
+	if got := checkOpsInMessage("call aclnnAddmm failed", prefixOps); got != "aclnnAddmm" {
+		t.Errorf("checkOpsInMessage = %q, want aclnnAddmm (longest match)", got)
+	}
 }
 
 func TestCheckRunningSkiped(t *testing.T) {
