@@ -51,7 +51,8 @@ func LoadAPIATenFS(fsys fs.FS, name string) ([]string, error) {
 }
 
 // parseAPIATen 读取 api-ATen.xlsx 的 Sheet1，提取「API名称」列（B）与
-// 「依托ATen算子」列（C），C 列以分号分隔多个 ATen 算子名，两列合并去重后返回。
+// 「依托ATen算子」列（C）。B 列原样加入；C 列按分号拆分后加 aten:: 前缀加入
+// （如 mode → aten::mode），避免裸算子名整词匹配时误命中日志源码中的同名变量/参数。
 func parseAPIATen(r io.Reader) ([]string, error) {
 	xlsx, err := excelize.OpenReader(r)
 	if err != nil {
@@ -83,9 +84,13 @@ func parseAPIATen(r io.Reader) ([]string, error) {
 		}
 		for _, tok := range strings.Split(aten, ";") {
 			tok = strings.TrimSpace(tok)
-			if tok != "" && !seen[tok] {
-				seen[tok] = true
-				names = append(names, tok)
+			if tok == "" {
+				continue
+			}
+			key := "aten::" + tok
+			if !seen[key] {
+				seen[key] = true
+				names = append(names, key)
 			}
 		}
 	}

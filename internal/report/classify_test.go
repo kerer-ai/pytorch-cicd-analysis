@@ -121,26 +121,39 @@ func TestCheckOpsInMessage(t *testing.T) {
 }
 
 func TestCheckAPIATenInMessage(t *testing.T) {
-	names := []string{"hypot", "hypot_", "Tensor.cauchy_"}
-	// 完全匹配：独立标识符命中。
-	if got := checkAPIATenInMessage("call hypot failed", names); got != "hypot" {
-		t.Errorf("checkAPIATenInMessage = %q, want hypot", got)
+	names := []string{"aten::hypot", "aten::hypot_", "Tensor.cauchy_"}
+	// ATen 算子（aten:: 前缀）整词命中。
+	if got := checkAPIATenInMessage("Could not run 'aten::hypot' with arguments", names); got != "aten::hypot" {
+		t.Errorf("checkAPIATenInMessage = %q, want aten::hypot", got)
 	}
-	// 完全匹配：hypot 不应命中 hypotddd（子串前缀）。
-	if got := checkAPIATenInMessage("call hypotddd failed", names); got != "" {
+	// aten::hypot 不应命中 aten::hypotddd（尾部边界）。
+	if got := checkAPIATenInMessage("Could not run 'aten::hypotddd' with arguments", names); got != "" {
 		t.Errorf("checkAPIATenInMessage = %q, want empty (not whole word)", got)
 	}
-	// 下划线结尾算子名作为独立标识符命中。
-	if got := checkAPIATenInMessage("call hypot_ failed", names); got != "hypot_" {
-		t.Errorf("checkAPIATenInMessage = %q, want hypot_", got)
+	// 下划线结尾算子名（aten::hypot_）整词命中。
+	if got := checkAPIATenInMessage("Could not run 'aten::hypot_' with arguments", names); got != "aten::hypot_" {
+		t.Errorf("checkAPIATenInMessage = %q, want aten::hypot_", got)
 	}
-	// API 名含点号，完全匹配命中。
+	// API 名含点号，整词命中。
 	if got := checkAPIATenInMessage("Tensor.cauchy_ not supported", names); got != "Tensor.cauchy_" {
 		t.Errorf("checkAPIATenInMessage = %q, want Tensor.cauchy_", got)
 	}
 	// Tensor.cauchy_ 不应命中 Tensor.cauchy_x（尾部边界）。
 	if got := checkAPIATenInMessage("Tensor.cauchy_x not supported", names); got != "" {
 		t.Errorf("checkAPIATenInMessage = %q, want empty (not whole word)", got)
+	}
+	// 裸 ATen 算子名 mode 不应命中日志源码中的同名变量/参数。
+	modeNames := []string{"aten::mode"}
+	if got := checkAPIATenInMessage("_test(t, weight_even, mode)", modeNames); got != "" {
+		t.Errorf("checkAPIATenInMessage = %q, want empty (bare mode variable)", got)
+	}
+	// nodeid 里的 _mode_ 片段也不应命中。
+	if got := checkAPIATenInMessage("test_conv1d_vs_scipy_mode_same_npu_complex64", modeNames); got != "" {
+		t.Errorf("checkAPIATenInMessage = %q, want empty (mode inside nodeid)", got)
+	}
+	// aten::mode 整词命中。
+	if got := checkAPIATenInMessage("The operator 'aten::mode' is not currently supported", modeNames); got != "aten::mode" {
+		t.Errorf("checkAPIATenInMessage = %q, want aten::mode", got)
 	}
 }
 
