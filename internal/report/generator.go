@@ -812,6 +812,7 @@ func writeBlacklistJSONs(disabledPath, runningPath string, orderedFiles []fileGr
 					disabled.disabledVals[tc.NodeID] = disabledEntry{
 						Category: category,
 						Reason:   reason,
+						Issue:    ctx.unsupported.CategoryIssue(category),
 					}
 				}
 			}

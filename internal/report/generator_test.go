@@ -575,8 +575,8 @@ func TestBlacklistJSONOrderAndFormat(t *testing.T) {
 	if !(zzzIdx >= 0 && aaaIdx > zzzIdx && mmmIdx > aaaIdx) {
 		t.Errorf("disabled json key order should be insertion order, content:\n%s", content)
 	}
-	// 增量条目：category 来自 typeMap，issue 空
-	if !strings.Contains(content, `"mmm/incr.py::TestC::t3": {"category": "device not supported", "reason": "not implemented for DT_DOUBLE", "issue": ""}`) {
+	// 增量条目：category 来自 typeMap，issue 按 category 补充
+	if !strings.Contains(content, `"mmm/incr.py::TestC::t3": {"category": "device not supported", "reason": "not implemented for DT_DOUBLE", "issue": "https://gitcode.com/Ascend/pytorch/issues/5314"}`) {
 		t.Errorf("incremental entry format mismatch:\n%s", content)
 	}
 	// 字节级格式

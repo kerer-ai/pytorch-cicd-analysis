@@ -47,5 +47,10 @@
     {"category": "device_not_supported", "keywords": ["Only runs on cuda"]}
   ],
 
-  "ops_match_category": "cann not supported"
+  "ops_match_category": "cann not supported",
+
+  "category_issues": {
+    "device not supported": "https://gitcode.com/Ascend/pytorch/issues/5314",
+    "cann not supported": "https://gitcode.com/Ascend/pytorch/issues/5315"
+  }
 }

@@ -21,10 +21,11 @@ type keywordPattern struct {
 }
 
 type unsupportedFile struct {
-	CannCategories      []string         `json:"cann_categories"`
-	UnsupportedPatterns []keywordPattern `json:"unsupported_patterns"`
-	RunningSkiped       []keywordPattern `json:"running_skiped"`
-	OpsMatchCategory    string           `json:"ops_match_category"`
+	CannCategories      []string          `json:"cann_categories"`
+	UnsupportedPatterns []keywordPattern  `json:"unsupported_patterns"`
+	RunningSkiped       []keywordPattern  `json:"running_skiped"`
+	OpsMatchCategory    string            `json:"ops_match_category"`
+	CategoryIssues      map[string]string `json:"category_issues"`
 }
 
 type UnsupportedConfig struct {
@@ -32,6 +33,7 @@ type UnsupportedConfig struct {
 	patterns         []keywordPattern
 	runningSkiped    []keywordPattern
 	opsMatchCategory string
+	categoryIssues   map[string]string
 }
 
 func LoadUnsupportedConfig(fsys fs.FS, name string) (*UnsupportedConfig, error) {
@@ -48,6 +50,7 @@ func LoadUnsupportedConfig(fsys fs.FS, name string) (*UnsupportedConfig, error) 
 		patterns:         uf.UnsupportedPatterns,
 		runningSkiped:    uf.RunningSkiped,
 		opsMatchCategory: uf.OpsMatchCategory,
+		categoryIssues:   uf.CategoryIssues,
 	}
 	for _, c := range uf.CannCategories {
 		cfg.cannCategories[c] = true
@@ -61,6 +64,14 @@ func (u *UnsupportedConfig) OpsMatchCategory() string {
 		return ""
 	}
 	return u.opsMatchCategory
+}
+
+// CategoryIssue 增量 disabled 时按 category 补充的 issue 链接（对齐固定 issue 编号规则）。
+func (u *UnsupportedConfig) CategoryIssue(category string) string {
+	if u == nil || u.categoryIssues == nil {
+		return ""
+	}
+	return u.categoryIssues[category]
 }
 
 // IsCANNCategory 分类名命中 cann_categories 名单。
