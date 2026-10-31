@@ -587,11 +587,7 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 			if tc.Status != "failed" && tc.Status != "error" {
 				continue
 			}
-			unsupported, _ := classifyCase(tc.Status, tc.Message, ctx.ops, ctx.unsupported)
-			if unsupported == "是" {
-				continue
-			}
-			// api-ATen 未支持（优先级高于 ops.txt）：完全匹配（词边界），
+			// api-ATen 未支持（优先级最高，高于 ops.txt 与 unsupported）：完全匹配（词边界），
 			// 「算子失败用例」sheet 写命中的 API/ATen 名，
 			// all_failed/分组 sheet 失败大类固定为「ATen未实现」。
 			if name := checkAPIATenInMessage(tc.Message, ctx.apiATen); name != "" {
@@ -611,6 +607,10 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 				allRecords = append(allRecords, r)
 				key := fc.Classification + "+" + fc.Specialization
 				grouped[key] = append(grouped[key], r)
+				continue
+			}
+			unsupported, _ := classifyCase(tc.Status, tc.Message, ctx.ops, ctx.unsupported)
+			if unsupported == "是" {
 				continue
 			}
 			// Python classify_failed 从 all_testcases.xlsx 回读消息再分类，
@@ -804,6 +804,10 @@ func writeBlacklistJSONs(disabledPath, runningPath string, orderedFiles []fileGr
 				continue
 			}
 			if tc.Status == "failed" || tc.Status == "error" {
+				// ops.txt 算子命中不进 disabled（已改入 failed_testcases 算子失败用例）
+				if checkOpsInMessage(tc.Message, ctx.ops) != "" {
+					continue
+				}
 				_, reason := classifyCase(tc.Status, tc.Message, ctx.ops, ctx.unsupported)
 				if reason != "" && !disabled.seen[tc.NodeID] {
 					category := typeMap[strings.ToLower(reason)]
