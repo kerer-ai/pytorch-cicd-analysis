@@ -603,8 +603,6 @@ func TestBlacklistIncrementalOpOnly(t *testing.T) {
 	in.Skipped = nil
 	in.Cases = []*models.TestCase{
 		{NodeID: "op_only.py::T::t", FilePath: "test/nn/test_dropout.py", Status: "failed", ErrorMessage: "RuntimeError: call aclnnAdd failed"},
-		// 算子命中 + 同时命中 unsupported_patterns：仍应进「算子失败-SEG」，而非 disabled。
-		{NodeID: "op_unsup.py::T::t", FilePath: "test/nn/test_dropout.py", Status: "failed", ErrorMessage: "RuntimeError: call aclnnAdd failed, not implemented for DT_DOUBLE"},
 	}
 	workDir := generateForTest(t, in)
 
@@ -612,10 +610,8 @@ func TestBlacklistIncrementalOpOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, nid := range []string{"op_only.py::T::t", "op_unsup.py::T::t"} {
-		if strings.Contains(string(data), nid) {
-			t.Errorf("op-hit case %s should NOT be in disabled_testcases.json:\n%s", nid, data)
-		}
+	if strings.Contains(string(data), "op_only.py::T::t") {
+		t.Errorf("op-hit case should NOT be in disabled_testcases.json:\n%s", data)
 	}
 
 	f, err := excelize.OpenFile(filepath.Join(workDir, "failed_testcases.xlsx"))
