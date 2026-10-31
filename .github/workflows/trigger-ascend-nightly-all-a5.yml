@@ -9,14 +9,16 @@ name: Trigger Ascend Nightly All & A5
 # (2026-09-30); dispatching the stale old name fails with a misleading
 # HTTP 422 "Workflow does not have 'workflow_dispatch' trigger".
 #
-# Schedule: daily 21:45 Beijing = UTC 13:45. Minute stays off :00/:30
+# Schedule: daily 19:46 Beijing = UTC 11:46. Minute stays off :00/:30
 # because GitHub drops/delays on-the-hour/half-hour scheduled runs under
 # load (see monitor-trigger-pr-ci.yml); a dropped tick here means a missed
-# nightly.
+# nightly. Observed 2026-10: cron in the US-morning peak (UTC 13:45/15:24)
+# ran ~5h late or was dropped whole days; UTC 11:46 lands before US
+# business hours to reduce (not eliminate) schedule queue backlog.
 
 on:
   schedule:
-    - cron: '45 13 * * *' # UTC 13:45 daily = Beijing 21:45
+    - cron: '46 11 * * *' # UTC 11:46 daily = Beijing 19:46
   workflow_dispatch: # keep manual trigger for testing
 
 permissions:
