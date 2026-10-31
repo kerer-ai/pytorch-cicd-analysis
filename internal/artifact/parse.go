@@ -107,7 +107,7 @@ type RawSkippedCase struct {
 	SkipReason   string          `json:"skip_reason"`
 	SkipCategory string          `json:"skip_category"`
 	SkipSource   string          `json:"skip_source"`
-	Issue        json.RawMessage `json:"issue"`
+	Issue        json.RawMessage `json:"skip_issue"`
 }
 
 // ParseSkippedCases 解析 skipped_cases.json，按首现顺序去重（nodeid）。

@@ -224,7 +224,7 @@ func readSkippedZip(t *testing.T, path string) []*models.SkippedCase {
 				SkipReason   string      `json:"skip_reason"`
 				SkipCategory string      `json:"skip_category"`
 				SkipSource   string      `json:"skip_source"`
-				Issue        interface{} `json:"issue"`
+				Issue        interface{} `json:"skip_issue"`
 			} `json:"skipped_cases"`
 		}
 		if err := json.Unmarshal(data, &payload); err != nil {

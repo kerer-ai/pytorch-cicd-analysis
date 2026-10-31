@@ -22,8 +22,8 @@ const tensorJSONL = `{"total_file":1,"total_cases":2}
 
 const skippedJSON = `{"total_skipped": 2, "sources": ["disabled_testcases.json", "running_skiped_testcases.json"],
 "skipped_cases": [
-  {"nodeid": "test/test_a.py::test_skip1", "file": "test/test_a.py", "skip_reason": "disabled reason", "skip_category": "cat-a", "skip_source": "disabled_testcases.json", "issue": "I6NPD3-ops-not-supported"},
-  {"nodeid": "test/test_a.py::test_skip1", "file": "test/test_a.py", "skip_reason": "dup", "skip_category": "cat-a", "skip_source": "disabled_testcases.json", "issue": null},
+  {"nodeid": "test/test_a.py::test_skip1", "file": "test/test_a.py", "skip_reason": "disabled reason", "skip_category": "cat-a", "skip_source": "disabled_testcases.json", "skip_issue": "I6NPD3-ops-not-supported"},
+  {"nodeid": "test/test_a.py::test_skip1", "file": "test/test_a.py", "skip_reason": "dup", "skip_category": "cat-a", "skip_source": "disabled_testcases.json", "skip_issue": null},
   {"nodeid": "test/test_b.py::test_x", "file": "test/test_b.py", "skip_reason": "running skip reason", "skip_source": "running_skiped_testcases.json"}
 ]}`
 
