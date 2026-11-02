@@ -11,7 +11,7 @@ import (
 )
 
 // writeMarkdownReport 生成 all_testcases_report.md，对齐 /tmp/20260909 gen_report.py：
-// 标题「# 测试报告」+ 总体概览/执行结果分布/失败用例分类/黑名单用例统计 四章。
+// 标题「# 测试报告」+ 总体概览/执行结果分布/黑名单用例统计/失败用例分类 四章。
 // 总体概览按 all_testcases.xlsx 拆分 sheet 名（= summary 模板 sheet）分组统计。
 // 计数收集按首现顺序，排序用稳定降序（对齐 Python Counter 首现序 + sorted 稳定性）。
 func writeMarkdownReport(path string, orderedFiles []fileGroup, ctx *reportContext, failedCatCounts []countKV, skipped []*models.SkippedCase, sndFiles []fileGroup, sndSkipped []*models.SkippedCase) error {
@@ -113,27 +113,8 @@ func writeMarkdownReport(path string, orderedFiles []fileGroup, ctx *reportConte
 	lines = append(lines, fmt.Sprintf("| failed（不支持） | %s | %s |", comma(totalUnsupported), pct(totalUnsupported)))
 	lines = append(lines, fmt.Sprintf("| failed（其他） | %s | %s |", comma(otherFailed), pct(otherFailed)))
 	lines = append(lines, fmt.Sprintf("| skipped | %s | %s |", comma(sumSkipped), pct(sumSkipped)))
+	lines = append(lines, fmt.Sprintf("| **合计** | **%s** | **%.1f%%** |", comma(totalValid), pct(totalValid)))
 	lines = append(lines, "")
-
-	// 失败用例分类（计数来自 failed_testcases.xlsx 生成，口径一致：已排除 unsupported）
-	if len(failedCatCounts) > 0 {
-		totalFailed := 0
-		for _, c := range failedCatCounts {
-			totalFailed += c.Count
-		}
-		sorted := make([]countKV, len(failedCatCounts))
-		copy(sorted, failedCatCounts)
-		sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Count > sorted[j].Count })
-
-		lines = append(lines, fmt.Sprintf("## 失败用例分类（共 %s 条）", comma(totalFailed)), "")
-		lines = append(lines, "| 失败大类 | 数量 | 占比 |")
-		lines = append(lines, "|---|---:|---:|")
-		for _, c := range sorted {
-			lines = append(lines, fmt.Sprintf("| %s | %s | %.1f%% |",
-				c.Name, comma(c.Count), float64(c.Count)/float64(totalFailed)*100))
-		}
-		lines = append(lines, "")
-	}
 
 	// 黑名单用例统计（按 skip 分类；running_skiped 空分类补 Running Skiped；
 	// 空 category 不计数，total = 计数和）
@@ -176,6 +157,26 @@ func writeMarkdownReport(path string, orderedFiles []fileGroup, ctx *reportConte
 			}
 			lines = append(lines, "")
 		}
+	}
+
+	// 失败用例分类（计数来自 failed_testcases.xlsx 生成，口径一致：已排除 unsupported）
+	if len(failedCatCounts) > 0 {
+		totalFailed := 0
+		for _, c := range failedCatCounts {
+			totalFailed += c.Count
+		}
+		sorted := make([]countKV, len(failedCatCounts))
+		copy(sorted, failedCatCounts)
+		sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Count > sorted[j].Count })
+
+		lines = append(lines, fmt.Sprintf("## 失败用例分类（共 %s 条）", comma(totalFailed)), "")
+		lines = append(lines, "| 失败大类 | 数量 | 占比 |")
+		lines = append(lines, "|---|---:|---:|")
+		for _, c := range sorted {
+			lines = append(lines, fmt.Sprintf("| %s | %s | %.1f%% |",
+				c.Name, comma(c.Count), float64(c.Count)/float64(totalFailed)*100))
+		}
+		lines = append(lines, "")
 	}
 
 	// ShouldNotDo 用例总结：已从 all_testcases / failed_testcases 排除，单独输出
