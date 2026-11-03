@@ -25,8 +25,8 @@ func TestCategorizerCompile(t *testing.T) {
 	if len(c.categories) == 0 {
 		t.Fatal("expected categories loaded")
 	}
-	if len(c.categories) != 32 {
-		t.Errorf("expected 32 main categories, got %d", len(c.categories))
+	if len(c.categories) != 34 {
+		t.Errorf("expected 34 main categories, got %d", len(c.categories))
 	}
 	for _, cat := range c.categories {
 		for _, r := range cat.Rules {
@@ -49,7 +49,6 @@ func TestCategorizeEngineParity(t *testing.T) {
 		{"dtype unsupported DT_DOUBLE", "RuntimeError: input dtype or format is not supported, get io input info is (DT_DOUBLE, ND)", "dtype不支持-DT_DOUBLE"},
 		{"dtype mismatch", "RuntimeError: The values for attribute 'dtype' do not match", "dtype不匹配"},
 		{"aclnn failed", "RuntimeError: call aclnnAdd failed, error code is 10001", "aclnn调用失败"},
-		{"op not in libopapi", "RuntimeError: aclnnConv or aclnnConvGetWorkspaceSize not in libopapi.so", "算子未实现"},
 		{"PTA acl api", "RuntimeError: ERR00100 operator name is aclnnRepeat", "PTA调用acl api失败"},
 		{"ACL stream sync", "RuntimeError: acl stream synchronize failed", "ACL流同步失败"},
 		{"LAPACK", "RuntimeError: Calling torch.linalg.eigh on a CPU tensor requires compiling PyTorch with LAPACK", "LAPACK/BLAS库缺失"},
@@ -85,6 +84,9 @@ func TestCategorizeEngineParity(t *testing.T) {
 		{"npu sparse csr incomplete row", "RuntimeError: expected row_indices to be a contiguous tensor per batch", "NPU sparse/CSR 稀疏算子实现不完整"},
 		{"empty_strided hardcode", "RuntimeError: Could not run 'aten::empty_strided' with arguments from the 'privateuseone' backend", "device 硬编码-未解耦"},
 		{"aclnn constant pad nd zero element", "Exception: constant_pad_nd:third_party/op-plugin/op_plugin/ops/opapi/ConstantPadNdKernelNpuOpApi.cpp:85 NPU function error: call aclnnConstantPadNd failed, error code is 161002 [ERROR] ERR00100 PTA call acl api failed.", "PTA调用acl api失败-op仓0元素短路适配"},
+		{"functionalize tensorwrapper", "RuntimeError: Cannot access storage of TensorWrapper", "NPU 算子的 functionalize 兼容缺陷"},
+		{"meta tensor copy out", "NotImplementedError: Cannot copy out of meta tensor; no data!", "测试断言 vs 实际报错文案不一致"},
+		{"aten convert_weight_to_int4pack", "NotImplementedError: Could not run 'aten::_convert_weight_to_int4pack'", "算子未实现-aten::_convert_weight_to_int4pack"},
 	}
 
 	for _, tc := range cases {
@@ -108,17 +110,6 @@ func TestCategorizeEvidenceTemplates(t *testing.T) {
 	}
 	if ev != "RuntimeError: call aclnnAdd failed, error code is 10001" {
 		t.Errorf("evidence = %q, want %q", ev, "RuntimeError: call aclnnAdd failed, error code is 10001")
-	}
-
-	// 无 evidence 模板的主分类 regex：evidence = 匹配片段上下文（extractContext），
-	// 非捕获组模板拼接（对齐 Python _extract_context(text, m.group(0))）
-	cat, ev, _ = c.Categorize("RuntimeError: Could not run 'aten::foo' with arguments from the 'CUDA' backend")
-	if cat != "算子未实现" {
-		t.Fatalf("category = %q", cat)
-	}
-	want := "RuntimeError: Could not run 'aten::foo' with arguments from the 'CUDA' backend"
-	if ev != want {
-		t.Errorf("evidence = %q, want %q", ev, want)
 	}
 }
 

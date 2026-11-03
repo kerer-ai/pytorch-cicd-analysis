@@ -136,15 +136,22 @@
       ]
     },
     {
-      "name": "算子未实现",
+      "name": "NPU 算子的 functionalize 兼容缺陷",
       "rules": [
-        {"regex": "Could not run '[^']+' with arguments from the '\\w+' backend"},
-        {"keyword": "ERR01004"},
-        {"keyword": "not in libopapi.so"},
-        {"keyword": "NotImplementedError"},
-        {"keyword": "is not currently supported on the NPU backend"}
-      ],
-      "exclude_keywords": ["aten::empty_strided"]
+        {"keyword": "Cannot access storage of TensorWrapper"}
+      ]
+    },
+    {
+      "name": "测试断言 vs 实际报错文案不一致",
+      "rules": [
+        {"keyword": "Cannot copy out of meta tensor"}
+      ]
+    },
+    {
+      "name": "算子未实现-aten::_convert_weight_to_int4pack",
+      "rules": [
+        {"keyword": "aten::_convert_weight_to_int4pack"}
+      ]
     },
     {
       "name": "NPU设备不支持",
