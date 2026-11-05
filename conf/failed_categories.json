@@ -12,9 +12,73 @@
 
   "categories": [
     {
+      "name": "设备链路故障",
+      "rules": [
+        {"all_keywords": ["ERR00100 PTA call acl api failed", "ACL_HBM_MEM"]}
+      ]
+    },
+    {
       "name": "PTA调用acl api失败-op仓0元素短路适配",
       "rules": [
         {"regex": "aclnn(ConstantPadNd|AdaptiveAvgPool3d|UnfoldGrad|Im2col)"}
+      ]
+    },
+    {
+      "name": "PTA调用acl api失败（dtype不支持）",
+      "rules": [
+        {"all_keywords": ["ERR00100 PTA call acl api failed", "should be in dtype support list"]},
+        {"all_keywords": ["ERR00100 PTA call acl api failed", "complex number type"]},
+        {"all_keywords": ["ERR00100 PTA call acl api failed", "dtype or format of the actual input or output parameter of the operator is inconsistent"]},
+        {"all_keywords": ["ERR00100 PTA call acl api failed", "Expected both tensors to have same dtype"]},
+        {"all_keywords": ["ERR00100 PTA call acl api failed", "AICPU does not support"]},
+        {"all_keywords": ["ERR00100 PTA call acl api failed", "Base dtype is integral and exponent negative integers is not allowed"]},
+        {"keyword": "aclnnGridSampler3D"}
+      ],
+      "subcategories": [
+        {
+          "name": "PTA调用acl api失败（dtype不支持）-aclnnReduceNansum",
+          "keyword": "aclnnReduceNansum",
+          "root_cause": "aclnnReduceNansum 支持 dtype：a3=[float32,float16,bfloat16,int8,int16,int32,int64,uint8,bool]，a5=[float32,float16,bfloat16]"
+        },
+        {
+          "name": "PTA调用acl api失败（dtype不支持）-aclnnLinalgVectorNorm",
+          "keyword": "aclnnLinalgVectorNorm",
+          "root_cause": "aclnnLinalgVectorNorm 支持 dtype：FLOAT32/FLOAT16/BFLOAT16"
+        },
+        {
+          "name": "PTA调用acl api失败（dtype不支持）-aclnnGridSampler3D",
+          "keyword": "aclnnGridSampler3D",
+          "root_cause": "aclnnGridSampler3D 支持 dtype：FLOAT32(仅interpolationMode=bilinear+C轴为4倍数时支持NDHWC)"
+        },
+        {
+          "name": "PTA调用acl api失败（dtype不支持）-aclnnLogit",
+          "keyword": "aclnnLogit",
+          "root_cause": "aclnnLogit 支持 dtype：BFLOAT16/FLOAT16/FLOAT"
+        },
+        {
+          "name": "PTA调用acl api失败（dtype不支持）-aclnnIsClose",
+          "keyword": "aclnnIsClose",
+          "root_cause": "aclnnIsClose 支持 dtype：FLOAT/INT32/INT64/FLOAT16/INT16/INT8/UINT8/DOUBLE/BOOL/BFLOAT16"
+        },
+        {
+          "name": "PTA调用acl api失败（dtype不支持）-aclnnCoalesceSparse",
+          "keyword": "aclnnCoalesceSparse",
+          "root_cause": "aclnnCoalesceSparse 支持 dtype：INT32/FLOAT16/FLOAT32"
+        },
+        {
+          "name": "PTA调用acl api失败（dtype不支持）-aclnnInplaceFillScalar",
+          "keyword": "aclnnInplaceFillScalar",
+          "root_cause": "aclnnInplaceFillScalar 支持 dtype：FLOAT/FLOAT16/UINT8/INT8/INT16/INT32/INT64/DOUBLE/COMPLEX64/COMPLEX128/BOOL/BFLOAT16/UINT16/UINT32/UINT64"
+        },
+        {
+          "name": "PTA调用acl api失败（dtype不支持）-aclnnInplaceLog1p",
+          "keyword": "aclnnInplaceLog1p",
+          "root_cause": "aclnnInplaceLog1p 支持 dtype：INT8/INT16/INT32/INT64/UINT8/BOOL/FLOAT/FLOAT16/DOUBLE/BFLOAT16"
+        },
+        {
+          "name": "PTA调用acl api失败（dtype不支持）-aclnnSvd",
+          "keyword": "aclnnSvd"
+        }
       ]
     },
     {

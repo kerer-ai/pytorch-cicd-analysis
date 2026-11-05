@@ -25,8 +25,8 @@ func TestCategorizerCompile(t *testing.T) {
 	if len(c.categories) == 0 {
 		t.Fatal("expected categories loaded")
 	}
-	if len(c.categories) != 34 {
-		t.Errorf("expected 34 main categories, got %d", len(c.categories))
+	if len(c.categories) != 36 {
+		t.Errorf("expected 36 main categories, got %d", len(c.categories))
 	}
 	for _, cat := range c.categories {
 		for _, r := range cat.Rules {
@@ -84,9 +84,14 @@ func TestCategorizeEngineParity(t *testing.T) {
 		{"npu sparse csr incomplete row", "RuntimeError: expected row_indices to be a contiguous tensor per batch", "NPU sparse/CSR 稀疏算子实现不完整"},
 		{"empty_strided hardcode", "RuntimeError: Could not run 'aten::empty_strided' with arguments from the 'privateuseone' backend", "device 硬编码-未解耦"},
 		{"aclnn constant pad nd zero element", "Exception: constant_pad_nd:third_party/op-plugin/op_plugin/ops/opapi/ConstantPadNdKernelNpuOpApi.cpp:85 NPU function error: call aclnnConstantPadNd failed, error code is 161002 [ERROR] ERR00100 PTA call acl api failed.", "PTA调用acl api失败-op仓0元素短路适配"},
+		{"aclnn reduce nansum", "Exception: NPU function error: call aclnnReduceNansum failed, error code is 161002 [ERROR] ERR00100 PTA call acl api failed. Tensor self not implemented for xxx, should be in dtype support list", "PTA调用acl api失败（dtype不支持）-aclnnReduceNansum"},
 		{"functionalize tensorwrapper", "RuntimeError: Cannot access storage of TensorWrapper", "NPU 算子的 functionalize 兼容缺陷"},
 		{"meta tensor copy out", "NotImplementedError: Cannot copy out of meta tensor; no data!", "测试断言 vs 实际报错文案不一致"},
 		{"aten convert_weight_to_int4pack", "NotImplementedError: Could not run 'aten::_convert_weight_to_int4pack'", "算子未实现-aten::_convert_weight_to_int4pack"},
+		{"device link fault", "ERROR: ERR00100 PTA call acl api failed. ACL_HBM_MEM: hbm memory access failed", "设备链路故障"},
+		{"aclnn linalg vector norm complex", "ERROR: ERR00100 PTA call acl api failed. call aclnnLinalgVectorNorm failed. The operator does not support the complex number type", "PTA调用acl api失败（dtype不支持）-aclnnLinalgVectorNorm"},
+		{"pta dtype support list", "ERROR: ERR00100 PTA call acl api failed. Tensor self not implemented for float64, should be in dtype support list [DT_FLOAT,DT_FLOAT16]", "PTA调用acl api失败（dtype不支持）"},
+		{"pta complex number type", "ERROR: ERR00100 PTA call acl api failed. The operator does not support the complex number type", "PTA调用acl api失败（dtype不支持）"},
 	}
 
 	for _, tc := range cases {
