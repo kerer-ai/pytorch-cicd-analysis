@@ -25,8 +25,8 @@ func TestCategorizerCompile(t *testing.T) {
 	if len(c.categories) == 0 {
 		t.Fatal("expected categories loaded")
 	}
-	if len(c.categories) != 36 {
-		t.Errorf("expected 36 main categories, got %d", len(c.categories))
+	if len(c.categories) != 37 {
+		t.Errorf("expected 37 main categories, got %d", len(c.categories))
 	}
 	for _, cat := range c.categories {
 		for _, r := range cat.Rules {
@@ -92,6 +92,7 @@ func TestCategorizeEngineParity(t *testing.T) {
 		{"aclnn linalg vector norm complex", "ERROR: ERR00100 PTA call acl api failed. call aclnnLinalgVectorNorm failed. The operator does not support the complex number type", "PTA调用acl api失败（dtype不支持）-aclnnLinalgVectorNorm"},
 		{"pta dtype support list", "ERROR: ERR00100 PTA call acl api failed. Tensor self not implemented for float64, should be in dtype support list [DT_FLOAT,DT_FLOAT16]", "PTA调用acl api失败（dtype不支持）"},
 		{"pta complex number type", "ERROR: ERR00100 PTA call acl api failed. The operator does not support the complex number type", "PTA调用acl api失败（dtype不支持）"},
+		{"pta param error", "ERROR: ERR00100 PTA call acl api failed. AclNN_Parameter_Error(EZ1001): check failed", "PTA调用acl api失败-参数错误（包含dtype错误）"},
 	}
 
 	for _, tc := range cases {

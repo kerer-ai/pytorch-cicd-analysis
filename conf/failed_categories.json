@@ -32,6 +32,9 @@
         {"all_keywords": ["ERR00100 PTA call acl api failed", "Expected both tensors to have same dtype"]},
         {"all_keywords": ["ERR00100 PTA call acl api failed", "AICPU does not support"]},
         {"all_keywords": ["ERR00100 PTA call acl api failed", "Base dtype is integral and exponent negative integers is not allowed"]},
+        {"all_keywords": ["ERR00100 PTA call acl api failed", "the dtype of bias must be"]},
+        {"all_keywords": ["ERR00100 PTA call acl api failed", "to be promotable but check failed"]},
+        {"all_keywords": ["ERR00100 PTA call acl api failed", "but instead found nullptr"]},
         {"keyword": "aclnnGridSampler3D"}
       ],
       "subcategories": [
@@ -78,7 +81,23 @@
         {
           "name": "PTA调用acl api失败（dtype不支持）-aclnnSvd",
           "keyword": "aclnnSvd"
+        },
+        {
+          "name": "PTA调用acl api失败（dtype不支持）-aclnnQuantMatmulV5",
+          "keyword": "aclnnQuantMatmulV5",
+          "root_cause": "aclnnQuantMatmulV5 支持 dtype：FLOAT/FLOAT16/BFLOAT16"
+        },
+        {
+          "name": "PTA调用acl api失败（dtype不支持）-aclnnMseLoss",
+          "keyword": "aclnnMseLoss",
+          "root_cause": "aclnnMseLoss 支持 dtype：FLOAT/FLOAT16，issue：https://www.hiascend.com/en-sg/document/detail/en/CANNCommunityEdition/latest/API/aolapi/context/ops-nn/aclnnMseLoss.md"
         }
+      ]
+    },
+    {
+      "name": "PTA调用acl api失败-参数错误（包含dtype错误）",
+      "rules": [
+        {"all_keywords": ["ERR00100 PTA call acl api failed", "AclNN_Parameter_Error(EZ1001)"]}
       ]
     },
     {
