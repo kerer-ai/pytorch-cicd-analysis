@@ -36,7 +36,8 @@
         {"all_keywords": ["ERR00100 PTA call acl api failed", "to be promotable but check failed"]},
         {"all_keywords": ["ERR00100 PTA call acl api failed", "but instead found nullptr"]},
         {"all_keywords": ["ERR00100 PTA call acl api failed", "Invalid_Argument_Tensor_Dtype(EZ0020)"]},
-        {"keyword": "aclnnGridSampler3D"}
+        {"keyword": "aclnnGridSampler3D"},
+        {"keyword": "call aclnnLogSpace failed, error code is 161002"}
       ],
       "subcategories": [
         {
@@ -92,6 +93,11 @@
           "name": "PTA调用acl api失败（dtype不支持）-aclnnMseLoss",
           "keyword": "aclnnMseLoss",
           "root_cause": "aclnnMseLoss 支持 dtype：FLOAT/FLOAT16，issue：https://www.hiascend.com/en-sg/document/detail/en/CANNCommunityEdition/latest/API/aolapi/context/ops-nn/aclnnMseLoss.md"
+        },
+        {
+          "name": "PTA调用acl api失败（dtype不支持）-aclnnLogSpace",
+          "keyword": "aclnnLogSpace",
+          "root_cause": "aclnnLogSpace 支持文档：https://gitcode.com/cann/ops-math/blob/master/math/logspace/docs/aclnnLogSpace.md"
         }
       ]
     },
@@ -99,13 +105,6 @@
       "name": "PTA调用acl api失败-参数错误（包含dtype错误）",
       "rules": [
         {"all_keywords": ["ERR00100 PTA call acl api failed", "AclNN_Parameter_Error(EZ1001)"]}
-      ],
-      "subcategories": [
-        {
-          "name": "PTA调用acl api失败-参数错误（包含dtype错误）-aclnnLogSpace",
-          "keyword": "aclnnLogSpace",
-          "root_cause": "aclnnLogSpace 支持文档：https://gitcode.com/cann/ops-math/blob/master/math/logspace/docs/aclnnLogSpace.md"
-        }
       ]
     },
     {
