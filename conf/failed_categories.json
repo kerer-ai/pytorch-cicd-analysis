@@ -86,7 +86,7 @@
         {
           "name": "PTA调用acl api失败（dtype不支持）-aclnnQuantMatmulV5",
           "keyword": "aclnnQuantMatmulV5",
-          "root_cause": "aclnnQuantMatmulV5 支持 dtype：FLOAT/FLOAT16/BFLOAT16，issue：https://gitcode.com/cann/ops-math/blob/master/math/logspace/docs/aclnnLogSpace.md"
+          "root_cause": "aclnnQuantMatmulV5 支持 dtype：FLOAT/FLOAT16/BFLOAT16，issue：https://gitcode.com/cann/ops-nn/blob/master/matmul/quant_batch_matmul_v4/README.md"
         },
         {
           "name": "PTA调用acl api失败（dtype不支持）-aclnnMseLoss",
@@ -99,6 +99,13 @@
       "name": "PTA调用acl api失败-参数错误（包含dtype错误）",
       "rules": [
         {"all_keywords": ["ERR00100 PTA call acl api failed", "AclNN_Parameter_Error(EZ1001)"]}
+      ],
+      "subcategories": [
+        {
+          "name": "PTA调用acl api失败-参数错误（包含dtype错误）-aclnnLogSpace",
+          "keyword": "aclnnLogSpace",
+          "root_cause": "aclnnLogSpace 支持文档：https://gitcode.com/cann/ops-math/blob/master/math/logspace/docs/aclnnLogSpace.md"
+        }
       ]
     },
     {
