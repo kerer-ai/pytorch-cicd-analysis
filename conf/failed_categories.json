@@ -35,6 +35,7 @@
         {"all_keywords": ["ERR00100 PTA call acl api failed", "the dtype of bias must be"]},
         {"all_keywords": ["ERR00100 PTA call acl api failed", "to be promotable but check failed"]},
         {"all_keywords": ["ERR00100 PTA call acl api failed", "but instead found nullptr"]},
+        {"all_keywords": ["ERR00100 PTA call acl api failed", "Invalid_Argument_Tensor_Dtype(EZ0020)"]},
         {"keyword": "aclnnGridSampler3D"}
       ],
       "subcategories": [
@@ -85,7 +86,7 @@
         {
           "name": "PTA调用acl api失败（dtype不支持）-aclnnQuantMatmulV5",
           "keyword": "aclnnQuantMatmulV5",
-          "root_cause": "aclnnQuantMatmulV5 支持 dtype：FLOAT/FLOAT16/BFLOAT16"
+          "root_cause": "aclnnQuantMatmulV5 支持 dtype：FLOAT/FLOAT16/BFLOAT16，issue：https://gitcode.com/cann/ops-math/blob/master/math/logspace/docs/aclnnLogSpace.md"
         },
         {
           "name": "PTA调用acl api失败（dtype不支持）-aclnnMseLoss",
