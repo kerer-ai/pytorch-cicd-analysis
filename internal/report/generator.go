@@ -591,6 +591,22 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 			if unsupported == "是" {
 				continue
 			}
+			// nodeid 命中 CUDA 专属文件 → 直接归类「CUDA专属」（优先于日志匹配）
+			if strings.Contains(tc.NodeID, "test/distributed/rpc/cuda/test_tensorpipe_agent.py") {
+				r := rec{fc.Classification, fc.Specialization, fg.path, tc.NodeID, tc.Status, tc.Message, "CUDA专属", "test/distributed/rpc/cuda/test_tensorpipe_agent.py", ""}
+				allRecords = append(allRecords, r)
+				key := fc.Classification + "+" + fc.Specialization
+				grouped[key] = append(grouped[key], r)
+				continue
+			}
+			// nodeid 命中滞后解耦文件 → 直接归类「滞后解耦文件」
+			if strings.Contains(tc.NodeID, "test/distributed/rpc/test_tensorpipe_agent.py") {
+				r := rec{fc.Classification, fc.Specialization, fg.path, tc.NodeID, tc.Status, tc.Message, "滞后解耦文件", "test/distributed/rpc/test_tensorpipe_agent.py", ""}
+				allRecords = append(allRecords, r)
+				key := fc.Classification + "+" + fc.Specialization
+				grouped[key] = append(grouped[key], r)
+				continue
+			}
 			// api-ATen 未支持（优先级高于 ops.txt）：完全匹配（词边界），
 			// 「算子失败用例」sheet 写命中的 API/ATen 名，
 			// all_failed/分组 sheet 失败大类固定为「ATen未实现」。
