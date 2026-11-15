@@ -12,6 +12,12 @@
 
   "categories": [
     {
+      "name": "进程数超限",
+      "rules": [
+        {"keyword": "started user processes on the device exceeds the limit"}
+      ]
+    },
+    {
       "name": "设备链路故障",
       "rules": [
         {"all_keywords": ["ERR00100 PTA call acl api failed", "ACL_HBM_MEM"]}

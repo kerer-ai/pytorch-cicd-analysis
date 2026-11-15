@@ -25,8 +25,8 @@ func TestCategorizerCompile(t *testing.T) {
 	if len(c.categories) == 0 {
 		t.Fatal("expected categories loaded")
 	}
-	if len(c.categories) != 37 {
-		t.Errorf("expected 37 main categories, got %d", len(c.categories))
+	if len(c.categories) != 38 {
+		t.Errorf("expected 38 main categories, got %d", len(c.categories))
 	}
 	for _, cat := range c.categories {
 		for _, r := range cat.Rules {
@@ -58,6 +58,7 @@ func TestCategorizeEngineParity(t *testing.T) {
 		{"timeout", "RuntimeError: TimeoutError", "超时"},
 		{"unexpected success", "Exception: unexpected success", "意外成功"},
 		{"reshape zero", "RuntimeError: cannot reshape tensor of 0 elements into shape [2, 3]", "reshape零元素失败"},
+		{"process limit", "RuntimeError: The number of started user processes on the device exceeds the limit", "进程数超限"},
 		{"faketensor compare", "RuntimeError: when comparing the output of fake tensor", "FakeTensor比较不一致"},
 		{"aclrt timeout maps to PTA", "RuntimeError: aclrtSynchronizeStreamWithTimeout timed out after 300s", "PTA调用acl api失败"},
 		{"cpp compile", "CppCompileError: C++ compile error", "其他-编译错误"},
