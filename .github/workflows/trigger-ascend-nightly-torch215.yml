@@ -1,0 +1,67 @@
+name: Trigger Ascend Nightly torch215 A5 & A3
+
+# Scheduled trigger for two Ascend/pytorch "torch 2.15 upstream release"
+# nightlies on ci-test:
+#   - nightly-torch215-a5.yml (Nightly Build and Test A5, torch 2.15 x86_64)
+#   - nightly-torch215-a3.yml (Nightly Build and Test A3, torch 2.15 aarch64)
+# Both only exist on the ci-test branch and expose bare workflow_dispatch
+# (no inputs), so they are dispatched with --ref ci-test. Note a3 also keeps
+# its own upstream schedule (UTC 18:00 = Beijing 02:00); this trigger fires
+# at Beijing 19:50 for a second daily run, and the active-run guard below
+# skips dispatch when the upstream schedule already has a run in flight.
+#
+# Schedule: daily 19:50 Beijing = UTC 11:50. Minute stays off :00/:30
+# because GitHub drops/delays on-the-hour/half-hour scheduled runs under
+# load (see monitor-trigger-pr-ci.yml); a dropped tick here means a missed
+# trigger. UTC 11:50 lands before US business hours, same window that
+# trigger-ascend-nightly-all-a5.yml (UTC 11:46) uses to reduce (not
+# eliminate) schedule queue backlog.
+
+on:
+  schedule:
+    - cron: '50 11 * * *' # UTC 11:50 daily = Beijing 19:50
+  workflow_dispatch: # keep manual trigger for testing
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger Ascend/pytorch nightly-torch215 a5 & a3
+        env:
+          GH_TOKEN: ${{ secrets.ASCEND_PAT }}
+        run: |
+          set -euo pipefail
+          FAILURES=""
+          for wf in nightly-torch215-a5.yml nightly-torch215-a3.yml; do
+            # Guard: skip if this upstream workflow is already running/queued
+            ACTIVE=$(gh run list --workflow="$wf" --repo Ascend/pytorch \
+              --status in_progress --json databaseId --jq 'length')
+            QUEUED=$(gh run list --workflow="$wf" --repo Ascend/pytorch \
+              --status queued --json databaseId --jq 'length')
+            if [ "$((ACTIVE + QUEUED))" -gt 0 ]; then
+              echo "### $wf: skipped (already active: ${ACTIVE} running, ${QUEUED} queued)" \
+                | tee -a "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            if gh workflow run "$wf" --repo Ascend/pytorch --ref ci-test; then
+              sleep 15 # let the dispatched run register before listing it
+              {
+                echo "### $wf: triggered"
+                gh run list --workflow="$wf" --repo Ascend/pytorch \
+                  --event workflow_dispatch -L 1 \
+                  --json url,createdAt,databaseId
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::error::failed to trigger $wf"
+              FAILURES="$FAILURES $wf"
+            fi
+          done
+          if [ -n "$FAILURES" ]; then
+            echo "::error::trigger failed for:$FAILURES"
+            exit 1
+          fi
