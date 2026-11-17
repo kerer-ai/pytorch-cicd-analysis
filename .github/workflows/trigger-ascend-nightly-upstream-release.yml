@@ -1,24 +1,32 @@
-name: Trigger Ascend Nightly All & A5
+name: Trigger Ascend Nightly upstream-release A5 & A3
 
-# Scheduled trigger for two Ascend/pytorch "full test" nightlies on ci-test:
-#   - nightly-a3.yml   (Nightly Build and Test A3 (All))
-#   - nightly-a5.yml   (Nightly Build and Test A5 (All))
+# Scheduled trigger for two Ascend/pytorch "upstream torch release"
+# nightlies on ci-test (torch 2.15.0 release wheels as of 2026-11):
+#   - nightly-upstream-release-a5.yml (A5 / x86_64, release wheels)
+#   - nightly-upstream-release-a3.yml (A3 / aarch64, release wheels)
 # Both only exist on the ci-test branch and expose bare workflow_dispatch
 # (no inputs), so they are dispatched with --ref ci-test.
-# Note: upstream renamed nightly_all.yml -> nightly-a3.yml in 393d083b
-# (2026-09-30); dispatching the stale old name fails with a misleading
-# HTTP 422 "Workflow does not have 'workflow_dispatch' trigger".
+# Rename history: nightly-torch215-a3.yml / nightly-torch215-a5.yml ->
+# nightly-upstream-release-*.yml (b9a98b64, 2026-11, "rename
+# nightly-torch215-* to nightly-upstream-release-* (version-agnostic
+# names)"). After such renames the GitHub API keeps the stale old-name
+# workflow record; dispatching the old name fails with a misleading HTTP
+# 422 "Workflow does not have 'workflow_dispatch' trigger".
+# Note: upstream-release-a3 also keeps its own upstream schedule (UTC
+# 18:00 = Beijing 02:00); this trigger fires at Beijing 19:50 daily for a
+# second run, and the active-run guard below skips dispatch when the
+# upstream schedule already has a run in flight.
 #
-# Schedule: Tue/Thu/Sat 21:20 Beijing = UTC 13:20. Minute stays off :00/:30
+# Schedule: daily 19:50 Beijing = UTC 11:50. Minute stays off :00/:30
 # because GitHub drops/delays on-the-hour/half-hour scheduled runs under
 # load (see monitor-trigger-pr-ci.yml); a dropped tick here means a missed
-# nightly. Caution: UTC 13:20 is inside the US-morning peak that observed
-# 2026-10 (UTC 13:45/15:24) ran ~5h late or dropped whole days — expect
-# occasional delayed/missed ticks at this slot.
+# trigger. UTC 11:50 lands before US business hours, same window that
+# trigger-ascend-nightly-main-full.yml (UTC 13:20) left and this slot
+# uses to reduce (not eliminate) schedule queue backlog.
 
 on:
   schedule:
-    - cron: '20 13 * * 2,4,6' # UTC 13:20 Tue/Thu/Sat = Beijing 21:20 Tue/Thu/Sat
+    - cron: '50 11 * * *' # UTC 11:50 daily = Beijing 19:50
   workflow_dispatch: # keep manual trigger for testing
 
 permissions:
@@ -29,13 +37,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Trigger Ascend/pytorch nightly-a3 & nightly-a5
+      - name: Trigger Ascend/pytorch nightly-upstream-release a5 & a3
         env:
           GH_TOKEN: ${{ secrets.ASCEND_PAT }}
         run: |
           set -euo pipefail
           FAILURES=""
-          for wf in nightly-a3.yml nightly-a5.yml; do
+          for wf in nightly-upstream-release-a5.yml nightly-upstream-release-a3.yml; do
             # Guard: skip if this upstream workflow is already running/queued
             ACTIVE=$(gh run list --workflow="$wf" --repo Ascend/pytorch \
               --status in_progress --json databaseId --jq 'length')
