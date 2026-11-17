@@ -4,7 +4,6 @@
   "# unsupported_patterns": "不支持模式检测，keywords数组内全部命中才算匹配(AND逻辑)，category为黑名单category字段",
   "# running_skiped": "运行时跳过模式检测，keywords数组内全部命中才算匹配(AND逻辑)，category为黑名单category字段",
   "# 大小写": "关键字匹配不区分大小写，配置中保留原始大小写以增强可读性",
-
   "cann_categories": [
     "PTA调用acl api失败",
     "LAPACK/BLAS库缺失",
@@ -25,30 +24,809 @@
     "dtype不支持-ComplexHalf",
     "NPU设备不支持"
   ],
-
   "unsupported_patterns": [
-    {"category": "device not supported", "keywords": ["not implemented for DT_COMPLEX"]},
-    {"category": "device not supported", "keywords": ["not implemented for DT_DOUBLE"]},
-    {"category": "device not supported", "keywords": ["Exception: Caused by sample input at index", "dtype=torch.float64"]},
-    {"category": "device not supported", "keywords": ["Exception: Caused by sample input at index", "dtype=torch.complex"]},
-    {"category": "device not supported", "keywords": ["Exception: Caused by error input at index", "dtype=torch.float64"]},
-    {"category": "device not supported", "keywords": ["Exception: Caused by error input at index", "dtype=torch.complex"]},
-    {"category": "device not supported", "keywords": ["Exception: Caused by reference input at index", "dtype=torch.float64"]},
-    {"category": "device not supported", "keywords": ["Exception: Caused by reference input at index", "dtype=torch.complex"]},
-    {"category": "cann not supported", "keywords": ["cannot be larger than 8 dimensions"]},
-    {"category": "cann not supported", "keywords": ["Jiterator is only supported on CUDA"]},
-    {"category": "cann not supported", "keywords": ["Only contiguous_format or preserve_format is supported"]},
-    {"category": "cann not supported", "keywords": ["NPU contiguous operator only supported contiguous memory format"]},
-    {"category": "cann not supported", "keywords": ["aten::_scaled_dot_product_flash_attention"]},
-    {"category": "cann not supported", "keywords": ["aten::_fill_mem_eff_dropout_mask_"]}
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_COMPLEX"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_DOUBLE"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Exception: Caused by sample input at index",
+        "dtype=torch.float64"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Exception: Caused by sample input at index",
+        "dtype=torch.complex"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Exception: Caused by error input at index",
+        "dtype=torch.float64"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Exception: Caused by error input at index",
+        "dtype=torch.complex"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Exception: Caused by reference input at index",
+        "dtype=torch.float64"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Exception: Caused by reference input at index",
+        "dtype=torch.complex"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "cannot be larger than 8 dimensions"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "Jiterator is only supported on CUDA"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "Only contiguous_format or preserve_format is supported"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "NPU contiguous operator only supported contiguous memory format"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "aten::_scaled_dot_product_flash_attention"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "aten::_fill_mem_eff_dropout_mask_"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_UINT8"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_INT16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "scalar_type:UInt16is not surpported"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "scalar_type:UInt32is not surpported"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "scalar_type:UInt64is not surpported"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "The dtype or format of the actual input or output parameter of the operator is inconsistent with that defined in the operator prototype OpDef"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_INT8"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_INT32"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_INT64"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_BOOL"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "has incorrect dtype DT_DOUBLE"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Self dtype DT_COMPLEX128 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Self dtype DT_COMPLEX64 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "input must be half, float or bfloat16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "The operator does not support the complex number type"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "self dtype [DT_INT16] should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "self dtype [DT_UINT8] should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Self dtype DT_INT16 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "self dtype [DT_INT8] should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "The values for attribute 'dtype' do not match: torch.float64 != torch.float32"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Self dtype DT_UINT8 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "Only c10::MemoryFormat::Contiguous is supported for creating a npu tensor"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_BFLOAT16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Object comparison failed: torch.float32 != torch.float64"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "has incorrect dtype DT_INT64"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_UINT64"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Dtypes torch.float32 and torch.float64 are not equal!"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "requires rank > 0"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "RNN input dtype (torch.float64) does not match weight dtype (torch.float32)"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Promote type DT_INT8 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "input must be half or float or int32 or bfloat16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "The values for attribute 'dtype' do not match: torch.float32 != torch.float64"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "interpolationMode 2 should be in range [0, 1]"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "input must be half, float, int or short or bfloat16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Self dtype DT_DOUBLE should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_FLOAT8_E4M3FN"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "promoteType dtype DT_UINT8 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Input type (double) and bias type (float) should be the same"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Dtypes torch.float64 and torch.float32 are not equal!"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Input type (npuDoubleType) and weight type (npuFloatType) should be the same"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_UINT32"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "has incorrect dtype DT_COMPLEX128"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_UINT16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "promoteType dtype DT_INT8 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "promoteType dtype DT_COMPLEX64 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "promoteType dtype DT_DOUBLE should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Object comparison failed: torch.float64 != torch.float32"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "dtype mismatch: float64 != <class 'numpy.float32'>"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "promoteType dtype DT_COMPLEX128 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "self dtype [DT_COMPLEX32] should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Promote type DT_INT16 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "has incorrect dtype DT_COMPLEX64"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Self dtype DT_COMPLEX32 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for 'ComplexFloat'"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_FLOAT16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for 'ComplexHalf'"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "the output given to float_power has dtype Float but the operation's result requires dtype Double"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for 'ComplexDouble'"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Promote type DT_UINT8 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "Format of real, imag and out should be equal, real [NCL], imag [ND], out [NCL]"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "BComplex32 has not been supported"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_FLOAT8_E5M2"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_FLOAT"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Input dtype should be either floating point or complex dtypes. Got self DT_COMPLEX64 and target DT_COMPLEX64 instead"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "promoteType dtype DT_COMPLEX32 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_DOUBLE but found DT_FLOAT"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "out cannot be DT_COMPLEX128, should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "out cannot be DT_COMPLEX64, should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Input dtype should be either floating point or complex dtypes. Got self DT_COMPLEX128 and target DT_COMPLEX128 instead"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "The size of tensor selfRef [10, 10] must match the size of tensor other [11, 11]"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "The size of tensor self [10, 10] must match the size of tensor exponent [11, 11]"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "AICPU does not support DT_COMPLEX64 for Index"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_FLOAT but found DT_DOUBLE"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Type promoting not supported. Got Double and Float"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "All tensors must have the same dtype, got input1: double, input2: double, weight: float, bias: float"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Integers to negative integer powers are not allowed"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "has incorrect dtype DT_INT8"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "has incorrect dtype DT_BFLOAT16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Float8_e5m2fnuz has not been supported"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "input must be half, float, or bfloat16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Float8_e4m3fnuz has not been supported"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "input must be half, float, int32 or bfloat16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "has incorrect dtype DT_FLOAT16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_FLOAT8_E8M0"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_BOOL but found DT_INT8"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_BOOL but found DT_UINT8"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "promoteType dtype DT_UINT32 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "promoteType dtype DT_UINT16 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Self dtype DT_BOOL should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_BOOL but found DT_BFLOAT16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_BOOL but found DT_INT32"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_BOOL but found DT_INT64"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_BOOL but found DT_COMPLEX128"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_FLOAT but found DT_FLOAT16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "promoteType dtype DT_UINT64 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_BOOL but found DT_COMPLEX64"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_BOOL but found DT_INT16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "dtype mismatch: torch.float32 != torch.float64"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype DT_INT8 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_BOOL but found DT_FLOAT16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_BOOL but found DT_DOUBLE"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_BOOL but found DT_FLOAT"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype is DT_DOUBLE but found DT_FLOAT16"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "has incorrect dtype DT_FLOAT"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype Double but got dtype Long"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Bits4x2 has not been supported"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Bits8 has not been supported"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "not implemented for DT_FLOAT4_E2M1"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Bits2x4 has not been supported"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Bits1x8 has not been supported"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype Float but got dtype Long"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype Int but got dtype Long"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Out dtype DT_COMPLEX64 should be in dtype support list"
+      ]
+    },
+    {
+      "category": "cann not supported",
+      "keywords": [
+        "Input format only supports [NCDHW, NDHWC, ND] format, but format is [NCL]"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype Half but got dtype ComplexHalf"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "Bits16 has not been supported"
+      ]
+    },
+    {
+      "category": "device not supported",
+      "keywords": [
+        "expected dtype Float but got dtype Double"
+      ]
+    }
   ],
-
   "running_skiped": [
-    {"category": "device_not_supported", "keywords": ["Only runs on cuda"]}
+    {
+      "category": "device_not_supported",
+      "keywords": [
+        "Only runs on cuda"
+      ]
+    }
   ],
-
   "ops_match_category": "cann not supported",
-
   "category_issues": {
     "device not supported": "https://gitcode.com/Ascend/pytorch/issues/5314",
     "cann not supported": "https://gitcode.com/Ascend/pytorch/issues/5315"
