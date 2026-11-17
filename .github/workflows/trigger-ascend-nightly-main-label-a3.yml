@@ -5,7 +5,7 @@ name: Trigger Ascend Nightly main-label-a3
 #     hw_classification 'GENERIC ACCELERATOR')
 # It only exists on the ci-test branch, exposes bare workflow_dispatch
 # (no inputs), and has NO schedule of its own — this trigger is its only
-# daily schedule (UTC 23:00 = Beijing 07:00).
+# daily schedule (UTC 10:40 = Beijing 18:40).
 # Note: upstream renamed nightly.yml -> nightly-main-label-a3.yml in
 # 57c53768 (2026-11-17, "rename nightly entries to version-agnostic
 # main-line names"). After such renames the GitHub API keeps the stale
@@ -14,7 +14,7 @@ name: Trigger Ascend Nightly main-label-a3
 
 on:
   schedule:
-    - cron: '0 23 * * *' # UTC 23:00 = Beijing 07:00
+    - cron: '40 10 * * *' # UTC 10:40 = Beijing 18:40
   workflow_dispatch: # keep manual trigger for testing
 
 permissions:
