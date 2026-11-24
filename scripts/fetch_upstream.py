@@ -128,15 +128,22 @@ def trigger_workflow(repo: str, workflow: str, ref: str) -> int:
     return int(runs[0]["databaseId"])
 
 
-def wait_completed(repo: str, run_id: int, timeout: int = 3600) -> None:
-    """轮询直到 run.status == completed（不看 conclusion，失败也视为完成）。"""
+def wait_completed(repo: str, run_id: int, timeout: int = 7200) -> str:
+    """轮询直到 run.status == completed，返回 conclusion（success/failure/...）。
+
+    「结束」不等于「成功」：结束只表示运行完毕，是否成功看 conclusion。
+    上游失败时通常没有产出 test-reports 制品，调用方需据此决定是否中止对账
+    （不要用不完整数据继续改黑名单）。
+    """
     deadline = time.time() + timeout
     while True:
         status = _gh_json([f"repos/{repo}/actions/runs/{run_id}",
                            "--jq", ".status"]).strip()
         if status == "completed":
-            print(f"run {run_id} completed")
-            return
+            conclusion = _gh_json([f"repos/{repo}/actions/runs/{run_id}",
+                                   "--jq", ".conclusion"]).strip()
+            print(f"run {run_id} completed (conclusion={conclusion})")
+            return conclusion
         if time.time() > deadline:
             raise SystemExit(f"timeout waiting for run {run_id} "
                              f"(last status={status})")
@@ -154,7 +161,7 @@ def main() -> None:
                    help="触发该 workflow（workflow_dispatch）并打印 run_id，不等待")
     p.add_argument("--ref", default=os.environ.get("UPSTREAM_REF", DEFAULT_REF))
     p.add_argument("--wait", type=int, default=0,
-                   help="等待该 run 完成（status==completed）")
+                   help="等待该 run 完成并打印 conclusion")
     p.add_argument("--download-all", action="store_true",
                    help="下载所有 name 前缀匹配的 artifact 到 --out-dir")
     p.add_argument("--out-dir", default="reports",
@@ -166,8 +173,9 @@ def main() -> None:
         print(f"run_id={rid}")
         return
     if a.wait:
-        wait_completed(a.repo, a.wait)
+        conclusion = wait_completed(a.repo, a.wait)
         print(f"run_id={a.wait}")
+        print(f"conclusion={conclusion}")
         return
 
     run_id = a.run_id or find_run(a.repo, a.workflow)

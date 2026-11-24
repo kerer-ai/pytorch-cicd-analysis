@@ -85,16 +85,23 @@ jobs:
             --workflow nightly-main-full-a5.yml --artifact test-reports \
             --download-all --out-dir reports/full-a5
 
-      # 3. 等删减线巡检完成
+      # 3. 等删减线巡检完成，并读取 conclusion（结束 != 成功）
+      #    上游失败 -> 直接中止，避免用不完整数据误改黑名单
       - name: Wait blacklist-test
+        id: wait
         env:
           GH_TOKEN: ${{ secrets.ASCEND_PAT }}
           RUN_ID: ${{ steps.trigger.outputs.run_id }}
         run: |
           set -euo pipefail
-          python3 scripts/fetch_upstream.py --wait "$RUN_ID"
+          CONCL="$(python3 scripts/fetch_upstream.py --wait "$RUN_ID" | grep -oP '(?<=conclusion=)\S+' | tail -1)"
+          echo "conclusion=$CONCL" >> "$GITHUB_OUTPUT"
+          if [ "$CONCL" != "success" ]; then
+            echo "::error::blacklist-test run $RUN_ID 失败 (conclusion=$CONCL)，中止对账：数据不全，避免误改黑名单"
+            exit 1
+          fi
 
-      # 4. 拉删减线复测结果
+      # 4. 拉删减线复测结果（已确认上游成功才会走到这里）
       - name: Download blacklist-test reports (删减线)
         env:
           GH_TOKEN: ${{ secrets.ASCEND_PAT }}
