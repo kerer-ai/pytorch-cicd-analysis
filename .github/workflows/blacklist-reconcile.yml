@@ -1,0 +1,143 @@
+name: Blacklist Auto Reconcile
+
+# 黑名单动态管理（自动加入 + 自动删减）对账流水线。
+# 对应方案：《黑名单动态管理（自动增删）实施方案.md》§2 / §8。
+#
+# 触发与提交（§1.1）：
+#   - 只在默认分支生效；本仓库即「独立分析仓库」。
+#   - 拉数据：gh api 只读拉取 Ascend/pytorch，须用 secrets.ASCEND_PAT
+#     （仓库约束：访问 Ascend/pytorch 须用 PAT，不能用 github.token）。
+#   - 提交：默认 dry-run（只出候选预览，不改仓库）；仅手动勾选 auto_commit
+#     才落盘并 push（§8.7「稳定后再开放自动提交」）。
+#
+# 数据源（三路，均为 test-reports 结构）：
+#   加入线（§2 / §6.1）：
+#     - nightly-main-full-a3.yml 的 test-reports 制品 -> platform=a3
+#     - nightly-main-full-a5.yml 的 test-reports 制品 -> platform=a5
+#       （a3/a5 排除黑名单后的全量 nodeid 执行结果）
+#   删减线（§2 / §6.2）：
+#     - blacklist-test.yml：本流水线先触发（ci-test 分支、无参）再拉结果，
+#       为「已在黑名单」的 nodeid 的复测结果，platform 按文件名 a3/a5 自动识别。
+
+on:
+  schedule:
+    # UTC 18:00 = Beijing 02:00，紧跟上游 nightly 之后
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+    inputs:
+      auto_commit:
+        description: '落盘并 push 变更（默认 false = 仅 dry-run 预览）'
+        required: false
+        default: false
+        type: boolean
+
+# contents: write 供 auto_commit 时 push 本仓库；拉上游仅用 secrets.ASCEND_PAT
+permissions:
+  contents: write
+
+concurrency:
+  group: blacklist-reconcile
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: Ascend/pytorch
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    # 触发 blacklist-test + 等待完成 + 三源下载，可能数小时
+    timeout-minutes: 720
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # auto_commit push 需要完整历史
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 1. 先触发删减线巡检（blacklist-test，ci-test 分支，无参），拿 run_id
+      - name: Trigger blacklist-test (删减线复测)
+        id: trigger
+        env:
+          GH_TOKEN: ${{ secrets.ASCEND_PAT }}
+        run: |
+          set -euo pipefail
+          python3 scripts/fetch_upstream.py \
+            --trigger-workflow blacklist-test.yml \
+            --ref ci-test | tee trigger.log
+          RUN_ID="$(grep -oP '(?<=run_id=)[0-9]+' trigger.log | tail -1)"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "- blacklist-test run: [$RUN_ID](https://github.com/$UPSTREAM_REPO/actions/runs/$RUN_ID)" >> "$GITHUB_STEP_SUMMARY"
+
+      # 2. 拉加入线 full-a3 / full-a5 的 test-reports（最近成功 run，全量制品）
+      - name: Download full-a3 / full-a5 (加入线)
+        env:
+          GH_TOKEN: ${{ secrets.ASCEND_PAT }}
+        run: |
+          set -euo pipefail
+          python3 scripts/fetch_upstream.py \
+            --workflow nightly-main-full-a3.yml --artifact test-reports \
+            --download-all --out-dir reports/full-a3
+          python3 scripts/fetch_upstream.py \
+            --workflow nightly-main-full-a5.yml --artifact test-reports \
+            --download-all --out-dir reports/full-a5
+
+      # 3. 等删减线巡检完成
+      - name: Wait blacklist-test
+        env:
+          GH_TOKEN: ${{ secrets.ASCEND_PAT }}
+          RUN_ID: ${{ steps.trigger.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/fetch_upstream.py --wait "$RUN_ID"
+
+      # 4. 拉删减线复测结果
+      - name: Download blacklist-test reports (删减线)
+        env:
+          GH_TOKEN: ${{ secrets.ASCEND_PAT }}
+          RUN_ID: ${{ steps.trigger.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/fetch_upstream.py \
+            --run-id "$RUN_ID" --artifact test-reports \
+            --download-all --out-dir reports/patrol
+
+      # 5. 解析三源 -> out/parsed_cases.json（full=显式平台，patrol=文件名识别平台）
+      - name: Parse & classify
+        env:
+          RUN_ID: ${{ steps.trigger.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/parse_and_classify.py \
+            --run-id "$RUN_ID" \
+            --out out/parsed_cases.json \
+            --full-a3-dir reports/full-a3 \
+            --full-a5-dir reports/full-a5 \
+            --patrol-dir reports/patrol
+
+      # 6. 对账（默认 dry-run）
+      - name: Reconcile (dry-run default)
+        env:
+          RUN_ID: ${{ steps.trigger.outputs.run_id }}
+          AUTO_COMMIT: ${{ inputs.auto_commit }}
+        run: |
+          set -euo pipefail
+          ARGS=(--parsed out/parsed_cases.json --run-id "$RUN_ID")
+          if [ "$AUTO_COMMIT" = 'true' ] || [ "$AUTO_COMMIT" = 'True' ]; then
+            ARGS+=(--commit)
+          fi
+          python3 scripts/reconcile.py "${ARGS[@]}" | tee reconcile.log
+          cat out/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload candidates artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: blacklist-reconcile-${{ steps.trigger.outputs.run_id }}
+          path: |
+            out/candidates.json
+            out/audit_preview.json
+            out/summary.md
+          if-no-files-found: error

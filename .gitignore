@@ -1,2 +1,7 @@
 # Ignore the upstream PyTorch clone (300M+)
 pytorch/
+
+# 运行期输出 / 临时脚本
+out/
+__pycache__/
+*.pyc
