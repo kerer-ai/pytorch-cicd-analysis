@@ -1,14 +1,17 @@
 name: Blacklist Auto Reconcile
 
-# 黑名单动态管理（自动加入 + 自动删减）对账流水线。
-# 对应方案：《黑名单动态管理（自动增删）实施方案.md》§2 / §8。
+# 黑名单动态管理对账流水线（纯分析版）：
+#   - 本仓库不保存黑名单副本：U / 索引 / 日志匹配库每轮运行时从上游
+#     Ascend/pytorch ci-test 分支 conf 拉取，永不静态复制。
+#   - 候选只出制品（candidates.json / summary.md），黑名单的任何变更
+#     一律由人工应用回上游 conf（纯人工回流，不再有 auto_commit）。
+#   - 本仓库每轮唯一持久化：status_history/（跨轮连续判定依据），
+#     运行结束提交回本仓库。
 #
-# 触发与提交（§1.1）：
+# 触发与数据源（§1.1）：
 #   - 只在默认分支生效；本仓库即「独立分析仓库」。
 #   - 拉数据：gh api 只读拉取 Ascend/pytorch，须用 secrets.ASCEND_PAT
 #     （仓库约束：访问 Ascend/pytorch 须用 PAT，不能用 github.token）。
-#   - 提交：默认 dry-run（只出候选预览，不改仓库）；仅手动勾选 auto_commit
-#     才落盘并 push（§8.7「稳定后再开放自动提交」）。
 #
 # 数据源（三路，均为 test-reports 结构）：
 #   加入线（§2 / §6.1）：
@@ -24,14 +27,8 @@ on:
     # UTC 18:00 = Beijing 02:00，紧跟上游 nightly 之后
     - cron: '0 18 * * *'
   workflow_dispatch:
-    inputs:
-      auto_commit:
-        description: '落盘并 push 变更（默认 false = 仅 dry-run 预览）'
-        required: false
-        default: false
-        type: boolean
 
-# contents: write 供 auto_commit 时 push 本仓库；拉上游仅用 secrets.ASCEND_PAT
+# contents: write 供运行结束提交 status_history 回本仓库；拉上游仅用 secrets.ASCEND_PAT
 permissions:
   contents: write
 
@@ -51,7 +48,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # auto_commit push 需要完整历史
+          fetch-depth: 0 # 提交 status_history 时避免非快进失败
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -85,8 +82,17 @@ jobs:
             --workflow nightly-main-full-a5.yml --artifact test-reports \
             --download-all --out-dir reports/full-a5
 
-      # 3. 等删减线巡检完成，并读取 conclusion（结束 != 成功）
-      #    上游失败 -> 直接中止，避免用不完整数据误改黑名单
+      # 3. 运行时拉取上游黑名单 conf（构建 U/索引/匹配库的唯一数据源，本仓库不存副本）
+      - name: Fetch upstream blacklist conf
+        env:
+          GH_TOKEN: ${{ secrets.ASCEND_PAT }}
+        run: |
+          set -euo pipefail
+          python3 scripts/fetch_upstream.py \
+            --fetch-conf --out-dir reports/upstream_conf
+
+      # 4. 等删减线巡检完成，并读取 conclusion（结束 != 成功）
+      #    上游失败 -> 直接中止，避免用不完整数据误判候选
       - name: Wait blacklist-test
         id: wait
         env:
@@ -97,11 +103,11 @@ jobs:
           CONCL="$(python3 scripts/fetch_upstream.py --wait "$RUN_ID" | grep -oP '(?<=conclusion=)\S+' | tail -1)"
           echo "conclusion=$CONCL" >> "$GITHUB_OUTPUT"
           if [ "$CONCL" != "success" ]; then
-            echo "::error::blacklist-test run $RUN_ID 失败 (conclusion=$CONCL)，中止对账：数据不全，避免误改黑名单"
+            echo "::error::blacklist-test run $RUN_ID 失败 (conclusion=$CONCL)，中止对账：数据不全，避免误判候选"
             exit 1
           fi
 
-      # 4. 拉删减线复测结果（已确认上游成功才会走到这里）
+      # 5. 拉删减线复测结果（已确认上游成功才会走到这里）
       - name: Download blacklist-test reports (删减线)
         env:
           GH_TOKEN: ${{ secrets.ASCEND_PAT }}
@@ -112,7 +118,7 @@ jobs:
             --run-id "$RUN_ID" --artifact test-reports \
             --download-all --out-dir reports/patrol
 
-      # 5. 解析三源 -> out/parsed_cases.json（full=显式平台，patrol=文件名识别平台）
+      # 6. 解析三源 -> out/parsed_cases.json（full=显式平台，patrol=文件名识别平台）
       - name: Parse & classify
         env:
           RUN_ID: ${{ steps.trigger.outputs.run_id }}
@@ -125,18 +131,16 @@ jobs:
             --full-a5-dir reports/full-a5 \
             --patrol-dir reports/patrol
 
-      # 6. 对账（默认 dry-run）
-      - name: Reconcile (dry-run default)
+      # 7. 对账（纯分析：候选只进制品，黑名单变更由人工应用回上游 conf）
+      - name: Reconcile (analysis only)
         env:
           RUN_ID: ${{ steps.trigger.outputs.run_id }}
-          AUTO_COMMIT: ${{ inputs.auto_commit }}
         run: |
           set -euo pipefail
-          ARGS=(--parsed out/parsed_cases.json --run-id "$RUN_ID")
-          if [ "$AUTO_COMMIT" = 'true' ] || [ "$AUTO_COMMIT" = 'True' ]; then
-            ARGS+=(--commit)
-          fi
-          python3 scripts/reconcile.py "${ARGS[@]}" | tee reconcile.log
+          python3 scripts/reconcile.py \
+            --parsed out/parsed_cases.json \
+            --run-id "$RUN_ID" \
+            --upstream-conf-dir reports/upstream_conf | tee reconcile.log
           cat out/summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload candidates artifact
@@ -148,3 +152,19 @@ jobs:
             out/audit_preview.json
             out/summary.md
           if-no-files-found: error
+
+      # 8. 持久化 status_history（本仓库唯一回写：跨轮连续判定的状态，与候选无关）
+      - name: Persist status_history
+        env:
+          RUN_ID: ${{ steps.trigger.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add status_history
+          if git diff --cached --quiet; then
+            echo "no new status_history records, nothing to commit"
+            exit 0
+          fi
+          git commit -m "chore(status_history): append records of upstream run ${RUN_ID}"
+          git push

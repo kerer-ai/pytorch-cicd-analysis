@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""拉取层：通过 `gh` 处理上游 Ascend/pytorch 的制品，支持三种操作。
+"""拉取层：通过 `gh` 处理上游 Ascend/pytorch 的制品，支持四种操作。
 
 对应方案 §4.1（扩展）：
   1. find_run + download_artifact —— 拉「最近一次成功」run 的制品（full-a3 / full-a5 加入线）。
   2. trigger_workflow + wait_completed —— 触发 blacklist-test（ci-test 无参）并等完成（删减线）。
+  3. fetch_conf_files —— 拉上游黑名单 conf 原始 JSON（运行时构建 U/索引/匹配库，本仓库不存副本）。
 
 需要环境变量 GH_TOKEN（访问 Ascend/pytorch 须 secrets.ASCEND_PAT，见仓库约束）。
 
@@ -14,6 +15,8 @@
   python fetch_upstream.py --trigger-workflow blacklist-test.yml --ref ci-test
   # 等某个 run 完成
   python fetch_upstream.py --wait 123456
+  # 拉上游黑名单 conf（构建 U / 日志匹配库的运行时数据源）
+  python fetch_upstream.py --fetch-conf --out-dir reports/upstream_conf
 """
 from __future__ import annotations
 
@@ -29,6 +32,8 @@ DEFAULT_REPO = "Ascend/pytorch"
 DEFAULT_WORKFLOW = "nightly-main-full-a3.yml"
 DEFAULT_ARTIFACT = "test-reports"
 DEFAULT_REF = "ci-test"
+# 上游黑名单 conf 所在目录（ci-test 分支）；文件清单以 blacklist_common.ALL_FILES 为准
+DEFAULT_CONF_PATH = ".github/config/blacklist_testccases/conf"
 
 
 def _gh_json(args: list) -> str:
@@ -56,6 +61,38 @@ def _gh_cli(args: list) -> str:
         print(proc.stderr, file=sys.stderr)
         raise SystemExit(proc.returncode)
     return proc.stdout
+
+
+def _gh_raw(endpoint: str) -> bytes:
+    """contents API + raw media type：直接返回文件原始字节。"""
+    env = os.environ.copy()
+    proc = subprocess.run(
+        ["gh", "api", "-H", "Accept: application/vnd.github.raw", endpoint],
+        env=env, capture_output=True)
+    if proc.returncode != 0:
+        print(proc.stderr.decode("utf-8", "replace"), file=sys.stderr)
+        raise SystemExit(proc.returncode)
+    return proc.stdout
+
+
+def fetch_conf_files(repo: str, ref: str, conf_path: str, out_dir: str,
+                     filenames: list) -> None:
+    """拉取上游黑名单 conf 原始 JSON 到 out_dir。
+
+    每轮运行时调用，构建 U / 索引 / 日志精确匹配库；本仓库不保存静态副本。
+    任一文件缺失即失败（fail-fast）：避免 U 被静默当成空集，误判「不在黑名单」。
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    for name in filenames:
+        endpoint = f"repos/{repo}/contents/{conf_path}/{name}?ref={ref}"
+        data = _gh_raw(endpoint)
+        if not data:
+            raise SystemExit(f"empty content for {repo}@{ref}:{conf_path}/{name}")
+        path = os.path.join(out_dir, name)
+        with open(path, "wb") as f:
+            f.write(data)
+        print(f"downloaded {repo}@{ref}:{conf_path}/{name} -> {path} "
+              f"({len(data)} bytes)")
 
 
 def find_run(repo: str, workflow: str) -> int:
@@ -165,9 +202,20 @@ def main() -> None:
     p.add_argument("--download-all", action="store_true",
                    help="下载所有 name 前缀匹配的 artifact 到 --out-dir")
     p.add_argument("--out-dir", default="reports",
-                   help="--download-all 时的输出目录")
+                   help="--download-all / --fetch-conf 时的输出目录")
+    p.add_argument("--fetch-conf", action="store_true",
+                   help="拉取上游黑名单 conf 原始 JSON 到 --out-dir（运行时数据源）")
+    p.add_argument("--conf-path",
+                   default=os.environ.get("UPSTREAM_CONF_PATH", DEFAULT_CONF_PATH),
+                   help="上游 conf 所在目录路径")
     a = p.parse_args()
 
+    if a.fetch_conf:
+        # 文件清单以 blacklist_common.ALL_FILES 为准（U 依赖的 4 个文件），缺一即失败
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import blacklist_common as bc
+        fetch_conf_files(a.repo, a.ref, a.conf_path, a.out_dir, list(bc.ALL_FILES))
+        return
     if a.trigger_workflow:
         rid = trigger_workflow(a.repo, a.trigger_workflow, a.ref)
         print(f"run_id={rid}")

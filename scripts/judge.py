@@ -184,7 +184,8 @@ def judge_remove(index, records, thresholds=None,
 def main() -> None:
     p = argparse.ArgumentParser(description="判定器：加入/删减候选")
     p.add_argument("--parsed", required=True)
-    p.add_argument("--config-dir", default=".github/config/blacklist_testccases")
+    p.add_argument("--config-dir", default="reports/upstream_conf",
+                   help="运行时拉取的上游 conf 目录（fetch_upstream.py --fetch-conf）")
     p.add_argument("--history-dir", default="status_history")
     a = p.parse_args()
 

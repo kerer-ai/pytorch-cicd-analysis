@@ -10,6 +10,11 @@
 
 本文件被 fetch_upstream / parse_and_classify / judge / reconcile 共同引用，
 只依赖标准库，无第三方依赖。
+
+黑名单数据源（重构后）：本仓库不保存黑名单副本；U / 索引 / 日志精确匹配库
+每轮运行时从上游 ci-test conf 拉取（fetch_upstream.py --fetch-conf），
+本模块的 *_dir 参数一律指向该运行时目录。serialize_type_a / roundtrip_check_type_a
+仅在需要生成上游格式 patch 时使用，保留备用。
 """
 from __future__ import annotations
 
@@ -171,10 +176,16 @@ def collect_nodeids(config_dir: str) -> set:
     return nodeids
 
 
-def build_index(config_dir: str) -> dict:
-    """nodeid -> {"file", "category", "issue"}，用于判定与删减定位。"""
+def build_index_from_data(type_a_entries: List[Tuple[str, List[dict]]],
+                          temp_data: Optional[dict] = None,
+                          platform_data: Optional[dict] = None) -> dict:
+    """从已加载的 conf 数据构建 nodeid -> {"file", "category", "issue"} 索引。
+
+    数据来自运行时拉取的上游 conf（fetch_upstream.py --fetch-conf），
+    本仓库不再维护黑名单静态副本；build_index(dir) 是本函数的按目录加载版。
+    """
     index: dict = {}
-    for filename, entries in load_type_a(config_dir):
+    for filename, entries in type_a_entries:
         for ent in entries:
             cat = ent.get("category", "")
             for nid, meta in ent.get("nodeids", {}).items():
@@ -183,23 +194,33 @@ def build_index(config_dir: str) -> dict:
                     "category": cat,
                     "issue": meta.get("issue", "") if isinstance(meta, dict) else "",
                 }
-    temp_path = os.path.join(config_dir, FILE_TEMP)
-    if os.path.exists(temp_path):
-        for g in load_json(temp_path).get("groups", []):
+    if temp_data:
+        for g in temp_data.get("groups", []):
             for nid in g.get("nodes", []):
                 index[nid] = {
                     "file": FILE_TEMP,
                     "category": g.get("category", ""),
                     "issue": g.get("issue", ""),
                 }
-    platform_path = os.path.join(config_dir, FILE_PLATFORM)
-    if os.path.exists(platform_path):
-        pd = load_json(platform_path)
-        for nid in pd.get("passed_a3", []):
+    if platform_data:
+        for nid in platform_data.get("passed_a3", []):
             index.setdefault(nid, {"file": FILE_PLATFORM, "category": "", "issue": ""})
-        for nid in pd.get("passed_a5", []):
+        for nid in platform_data.get("passed_a5", []):
             index.setdefault(nid, {"file": FILE_PLATFORM, "category": "", "issue": ""})
     return index
+
+
+def _load_json_if_exists(path: str):
+    return load_json(path) if os.path.exists(path) else None
+
+
+def build_index(config_dir: str) -> dict:
+    """按目录加载 conf 后委托 build_index_from_data（config_dir 现指向运行时拉取的上游 conf）。"""
+    return build_index_from_data(
+        load_type_a(config_dir),
+        _load_json_if_exists(os.path.join(config_dir, FILE_TEMP)),
+        _load_json_if_exists(os.path.join(config_dir, FILE_PLATFORM)),
+    )
 
 
 # ---------------------------------------------------------------------------
