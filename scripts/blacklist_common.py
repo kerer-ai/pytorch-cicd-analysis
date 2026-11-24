@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
 """黑名单动态管理（自动加入 + 自动删减）共享模块。
 
-对应《黑名单动态管理（自动增删）实施方案.md》：
-- §1.2 黑名单三类文件 schema
-- §1.3 类型 A 文件字节级序列化兼容（roundtrip 硬约束）
-- §1.4 category 枚举与阈值 N
-- §5 日志匹配规则词表
-- §7 一致性校验基础（collect_nodeids / build_index）
+提供黑名单三类文件的加载与序列化（类型 A 保持字节级 roundtrip）、全集 U 与
+索引构建、日志精确匹配与词表粗分、跨轮状态序列与连续计数等基础能力。
 
 本文件被 fetch_upstream / parse_and_classify / judge / reconcile 共同引用，
 只依赖标准库，无第三方依赖。
@@ -80,12 +76,6 @@ FAILED_STATUSES = ("failed", "errors", "error")
 def load_json(path: str):
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
-
-
-def dump_json(obj, path: str) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
-        f.write("\n")
 
 
 # ---------------------------------------------------------------------------

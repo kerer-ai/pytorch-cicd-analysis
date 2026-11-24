@@ -1,12 +1,14 @@
 name: Blacklist Auto Reconcile
 
-# 黑名单动态管理对账流水线（纯分析版）：
+# 黑名单动态管理对账流水线（纯分析 + 补丁）：
 #   - 本仓库不保存黑名单副本：U / 索引 / 日志匹配库每轮运行时从上游
 #     Ascend/pytorch ci-test 分支 conf 拉取，永不静态复制。
-#   - 候选只出制品（candidates.json / summary.md），黑名单的任何变更
-#     一律由人工应用回上游 conf（纯人工回流，不再有 auto_commit）。
-#   - 本仓库每轮唯一持久化：status_history/（跨轮连续判定依据），
-#     运行结束提交回本仓库。
+#   - 候选与补丁：制品输出 candidates.json / summary.md / blacklist_update.patch；
+#     补丁为针对上游 conf 的最小 unified diff，在上游仓库根目录
+#     `git apply -p1 <patch>` 即可应用。
+#   - 手动触发可勾选 auto_commit=true，把补丁提交到本仓库 blacklist_updates/
+#     （仅存档供审阅，不含黑名单本体；默认 false 只出制品）。
+#   - 本仓库每轮固定持久化：status_history/（跨轮连续判定依据），运行结束提交。
 #
 # 触发与数据源（§1.1）：
 #   - 只在默认分支生效；本仓库即「独立分析仓库」。
@@ -27,8 +29,14 @@ on:
     # UTC 18:00 = Beijing 02:00，紧跟上游 nightly 之后
     - cron: '0 18 * * *'
   workflow_dispatch:
+    inputs:
+      auto_commit:
+        description: '提交黑名单更新补丁到 blacklist_updates/（默认 false = 仅制品）'
+        required: false
+        default: false
+        type: boolean
 
-# contents: write 供运行结束提交 status_history 回本仓库；拉上游仅用 secrets.ASCEND_PAT
+# contents: write 供提交 status_history / 补丁回本仓库；拉上游仅用 secrets.ASCEND_PAT
 permissions:
   contents: write
 
@@ -131,8 +139,8 @@ jobs:
             --full-a5-dir reports/full-a5 \
             --patrol-dir reports/patrol
 
-      # 7. 对账（纯分析：候选只进制品，黑名单变更由人工应用回上游 conf）
-      - name: Reconcile (analysis only)
+      # 7. 对账（纯分析：候选 + 上游格式补丁都进制品，本仓库不写黑名单本体）
+      - name: Reconcile (analysis + patch)
         env:
           RUN_ID: ${{ steps.trigger.outputs.run_id }}
         run: |
@@ -140,7 +148,8 @@ jobs:
           python3 scripts/reconcile.py \
             --parsed out/parsed_cases.json \
             --run-id "$RUN_ID" \
-            --upstream-conf-dir reports/upstream_conf | tee reconcile.log
+            --upstream-conf-dir reports/upstream_conf \
+            --patch-out out/blacklist_update.patch | tee reconcile.log
           cat out/summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload candidates artifact
@@ -151,9 +160,32 @@ jobs:
             out/candidates.json
             out/audit_preview.json
             out/summary.md
+            out/blacklist_update.patch
           if-no-files-found: error
 
-      # 8. 持久化 status_history（本仓库唯一回写：跨轮连续判定的状态，与候选无关）
+      # 8. 手动触发且勾选 auto_commit 时，把补丁存档提交到 blacklist_updates/
+      #    （只含 diff，不含黑名单本体；人工审阅后到上游 git apply）
+      - name: Commit blacklist update patch
+        if: ${{ inputs.auto_commit }}
+        env:
+          RUN_ID: ${{ steps.trigger.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          if [ ! -s out/blacklist_update.patch ]; then
+            echo "patch is empty (no blacklist changes this run), nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p blacklist_updates
+          DEST="blacklist_updates/$(date -u +%Y-%m-%d)_${RUN_ID}.patch"
+          cp out/blacklist_update.patch "$DEST"
+          git add "$DEST"
+          git commit -m "chore(blacklist): add reconcile patch for upstream run ${RUN_ID}"
+          git push
+          echo "- 补丁已提交: \`$DEST\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # 9. 持久化 status_history（本仓库固定回写：跨轮连续判定的状态，与候选无关）
       - name: Persist status_history
         env:
           RUN_ID: ${{ steps.trigger.outputs.run_id }}
