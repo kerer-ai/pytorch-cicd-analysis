@@ -1,0 +1,221 @@
+name: AI Analyze Pipeline Failure
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_url:
+        description: 'Ascend/pytorch 失败流水线 URL（https://github.com/Ascend/pytorch/actions/runs/<id>，也支持纯 run ID）'
+        required: true
+      compare_url:
+        description: '可选：对比流水线 URL（用于双流水线回归对比分析）'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    name: opencode 根因分析
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      # gh api / gh run download 访问公有仓 Ascend/pytorch 的运行与制品（与 nightly-decoupling-report.yml 同款模式）
+      GH_TOKEN: ${{ github.token }}
+      # 火山AI网关 API key，经 opencode.jsonc 的 {env:OPENCODE_API_KEY} 注入
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate inputs and prepare workspace
+        id: prep
+        env:
+          RUN_URL_INPUT: ${{ inputs.run_url }}
+          COMPARE_URL_INPUT: ${{ inputs.compare_url }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${OPENCODE_API_KEY:-}" ]; then
+            echo "::error::缺少 secret OPENCODE_API_KEY。请在仓库 Settings -> Secrets and variables -> Actions 添加（值为火山AI网关的 API key）。"
+            exit 1
+          fi
+
+          RUN_URL_INPUT="$(echo "$RUN_URL_INPUT" | xargs)"
+          if [[ "$RUN_URL_INPUT" =~ ^https://github\.com/Ascend/pytorch/actions/runs/([0-9]+) ]]; then
+            RUN_ID="${BASH_REMATCH[1]}"
+            RUN_URL="$RUN_URL_INPUT"
+          elif [[ "$RUN_URL_INPUT" =~ ^[0-9]+$ ]]; then
+            RUN_ID="$RUN_URL_INPUT"
+            RUN_URL="https://github.com/Ascend/pytorch/actions/runs/$RUN_ID"
+          else
+            echo "::error::run_url 必须形如 https://github.com/Ascend/pytorch/actions/runs/<id> 或为纯数字 run ID，当前输入: $RUN_URL_INPUT"
+            exit 1
+          fi
+
+          COMPARE_URL=""
+          if [ -n "${COMPARE_URL_INPUT:-}" ]; then
+            COMPARE_URL_INPUT="$(echo "$COMPARE_URL_INPUT" | xargs)"
+            if [[ "$COMPARE_URL_INPUT" =~ ^https://github\.com/Ascend/pytorch/actions/runs/[0-9]+$ ]]; then
+              COMPARE_URL="$COMPARE_URL_INPUT"
+            else
+              echo "::error::compare_url 必须形如 https://github.com/Ascend/pytorch/actions/runs/<id>，当前输入: $COMPARE_URL_INPUT"
+              exit 1
+            fi
+          fi
+
+          # 大数据工作区：优先 /mnt（约 65GB 可用），否则回退 RUNNER_TEMP
+          DATA_DIR=""
+          if [ -d /mnt ] && [ -w /mnt ]; then
+            FREE_KB="$(df --output=avail -k /mnt | tail -n 1 | tr -d ' ')"
+            if [ "${FREE_KB:-0}" -gt $((20 * 1024 * 1024)) ]; then
+              DATA_DIR="/mnt/ai-analysis/$RUN_ID"
+            fi
+          fi
+          if [ -z "$DATA_DIR" ]; then
+            DATA_DIR="$RUNNER_TEMP/ai-analysis/$RUN_ID"
+          fi
+          mkdir -p "$DATA_DIR"
+          mkdir -p analysis-out
+
+          {
+            echo "run_id=$RUN_ID"
+            echo "run_url=$RUN_URL"
+            echo "compare_url=$COMPARE_URL"
+            echo "data_dir=$DATA_DIR"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "RUN_ID=$RUN_ID"
+          echo "RUN_URL=$RUN_URL"
+          echo "COMPARE_URL=${COMPARE_URL:-（无，单流水线分析）}"
+          echo "DATA_DIR=$DATA_DIR"
+          df -h / /mnt 2>/dev/null || df -h /
+
+      - name: Setup Node and install opencode
+        run: |
+          set -euo pipefail
+          # setup-node 已在上方省略：ubuntu-latest 自带 Node 20+，满足 opencode-ai 需求
+          node --version
+          npm install -g opencode-ai@latest
+          opencode --version
+
+      - name: Generate analysis prompt
+        env:
+          RUN_URL: ${{ steps.prep.outputs.run_url }}
+          COMPARE_URL: ${{ steps.prep.outputs.compare_url }}
+          DATA_DIR: ${{ steps.prep.outputs.data_dir }}
+          REPO_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          PROMPT_FILE="$RUNNER_TEMP/analysis-prompt.md"
+          if [ -z "$COMPARE_URL" ]; then
+            COMPARE_LINE="无（本次为单流水线失败分析）"
+          else
+            COMPARE_LINE="$COMPARE_URL"
+          fi
+          cat > "$PROMPT_FILE" <<EOF
+          @pipeline-case-failure-analyzer
+
+          请严格按照上述技能定义的完整流程（阶段 1 到阶段 6），分析以下 Ascend/pytorch GitHub Actions 流水线的测试用例失败根因：
+
+          - 目标流水线: $RUN_URL
+          - 对比流水线: $COMPARE_LINE
+
+          ## 运行环境说明（与技能默认假设的差异，务必遵守）
+
+          1. 当前环境是 GitHub Actions ubuntu-latest runner。当前目录是分析工具仓库（只读），不要修改其中任何文件，也不要把下载数据放进当前目录。
+          2. 大数据工作区已创建：$DATA_DIR（磁盘空间充足）。所有制品下载、日志解压、临时文件一律放在该目录下，可用其子目录组织。
+          3. gh CLI 已通过环境变量 GH_TOKEN 完成认证，无需 gh auth login，直接使用 gh api / gh run download。curl 访问 api.github.com / raw.githubusercontent.com 属匿名请求，注意速率限制，元数据查询优先用 gh api。
+          4. 本机没有本地 Ascend/pytorch 仓库克隆。技能阶段 5 若确需本地 git diff：在 $DATA_DIR/pytorch 下执行 git clone --depth 1 https://github.com/Ascend/pytorch.git，然后 git fetch --depth 1 origin <SHA> && git checkout FETCH_HEAD；若只是查看个别文件，优先直接获取 raw.githubusercontent.com 上钉在对应 commit 的文件（技能本身也要求钉 commit 查看源码）。
+          5. 磁盘与时间预算：ascend-cann-logs-* 单个制品压缩后可达数百 MB、解压后可达 10GB 级。只下载失败用例所在分片需要的制品；解压前先 tar -tzf 查看结构，能流式处理（tar -xzO ... | grep）就不要全量解压；每完成一个阶段就删除不再需要的大文件。
+
+          ## 输出要求
+
+          1. 最终中文 Markdown 根因报告写入：$REPO_DIR/analysis-out/report.md（该目录已创建，这是唯一允许写入的仓库内路径）。报告结构遵循技能定义：流水线信息、失败用例列表、根因分析、引入问题的 PR（如可定位）、修复建议。
+          2. 结构化摘要写入：$REPO_DIR/analysis-out/summary.json（UTF-8 JSON），字段：
+             {"run_id": <数字>, "workflow_name": "...", "head_sha": "...", "failed_cases": [{"nodeid": "...", "status": "...", "category": "...", "root_cause": "...", "suspected_pr": "..." 或 null}], "conclusion": "..."}
+          3. 所有结论必须基于实际下载到的日志与数据；无法确认的推断要明确标注置信度（高/中/低），禁止编造。
+          4. 两个文件写入完成后即可结束任务，无需任何交互确认。
+          EOF
+          echo "prompt 已生成: $(wc -c < "$PROMPT_FILE") bytes"
+
+      - name: Run opencode analysis
+        id: opencode
+        timeout-minutes: 110
+        env:
+          DATA_DIR: ${{ steps.prep.outputs.data_dir }}
+        run: |
+          set -uo pipefail
+          PROMPT_FILE="$RUNNER_TEMP/analysis-prompt.md"
+          set +e
+          opencode run \
+            --agent build \
+            --model volc-ai-gateway/glm-5.3 \
+            --auto \
+            --title "ai-analysis" \
+            "$(cat "$PROMPT_FILE")" \
+            2> >(tee analysis-out/opencode-stderr.log >&2) \
+            | tee analysis-out/opencode-output.log
+          OC_EXIT="${PIPESTATUS[0]}"
+          set -e
+          echo "exit=$OC_EXIT" >> "$GITHUB_OUTPUT"
+          echo "opencode 退出码: $OC_EXIT"
+          if [ "$OC_EXIT" -ne 0 ]; then
+            echo "::warning::opencode 退出码非 0（$OC_EXIT），继续检查报告是否已生成"
+          fi
+
+      - name: Validate report
+        env:
+          RUN_URL: ${{ steps.prep.outputs.run_url }}
+        run: |
+          set -euo pipefail
+          if [ ! -s analysis-out/report.md ]; then
+            echo "::error::analysis-out/report.md 未生成或为空（目标流水线: $RUN_URL）"
+            echo ""
+            echo "===== opencode stderr 尾部 ====="
+            tail -n 100 analysis-out/opencode-stderr.log 2>/dev/null || true
+            echo ""
+            echo "===== opencode stdout 尾部 ====="
+            tail -n 100 analysis-out/opencode-output.log 2>/dev/null || true
+            exit 1
+          fi
+          if [ -s analysis-out/summary.json ]; then
+            python3 -m json.tool analysis-out/summary.json > /dev/null \
+              && echo "summary.json 语法合法" \
+              || echo "::warning::summary.json 不是合法 JSON（不阻断）"
+          else
+            echo "::warning::summary.json 未生成（不阻断）"
+          fi
+          echo "report.md 大小: $(wc -c < analysis-out/report.md) bytes"
+
+      - name: Write step summary
+        if: success()
+        env:
+          RUN_URL: ${{ steps.prep.outputs.run_url }}
+          COMPARE_URL: ${{ steps.prep.outputs.compare_url }}
+        run: |
+          set -euo pipefail
+          {
+            echo "# AI 流水线失败分析报告"
+            echo
+            echo "- 目标流水线: $RUN_URL"
+            if [ -n "$COMPARE_URL" ]; then
+              echo "- 对比流水线: $COMPARE_URL"
+            fi
+            echo "- 分析引擎: opencode $(opencode --version) / volc-ai-gateway/glm-5.3"
+            echo "- 技能: pipeline-case-failure-analyzer"
+            echo
+            cat analysis-out/report.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-analysis-report-${{ steps.prep.outputs.run_id }}
+          path: |
+            analysis-out/
+            ${{ runner.temp }}/analysis-prompt.md
+          retention-days: 90
+          if-no-files-found: warn

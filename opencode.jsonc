@@ -1,0 +1,28 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "volc-ai-gateway/glm-5.3",
+  "small_model": "volc-ai-gateway/glm-5.3-flash",
+  "provider": {
+    "volc-ai-gateway": {
+      "name": "火山AI网关",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://st8tp3ajl0df3n8b8l8qu.apigateway-cn-beijing.volceapi.com/v1",
+        "apiKey": "{env:OPENCODE_API_KEY}"
+      },
+      "models": {
+        "glm-5.3": {
+          "name": "GLM-5.3"
+        },
+        "glm-5.3-flash": {
+          "name": "GLM-5.3 Flash"
+        }
+      }
+    }
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": "allow",
+    "webfetch": "allow"
+  }
+}
