@@ -193,13 +193,15 @@ def recent_runs(repo: str, workflow: str, limit: int, branch: str = "") -> list:
         q += f"&branch={branch}"
     jq = ("[.workflow_runs[] | select(.conclusion==\"success\")]"
           f" | sort_by(.created_at) | reverse | .[:{limit}]"
-          " | .[] | \"\\(.databaseId)\\t\\(.created_at)\"")
+          " | .[] | \"\\(.id)\\t\\(.created_at)\"")
     out = _gh_json([q, "--jq", jq])
     runs = []
     for line in out.splitlines():
         if "\t" not in line:
             continue
         rid, ts = line.split("\t", 1)
+        if not rid.strip().isdigit():
+            continue
         runs.append({"run_id": int(rid.strip()), "ts": ts.strip()})
     if not runs:
         raise SystemExit(f"no successful run found for {repo}/{workflow} "
