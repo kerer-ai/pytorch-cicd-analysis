@@ -21,12 +21,14 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import re
 import subprocess
 import sys
 import time
+import zipfile
 
 DEFAULT_REPO = "Ascend/pytorch"
 DEFAULT_WORKFLOW = "nightly-main-full-a3.yml"
@@ -152,6 +154,38 @@ def download_all_artifacts(repo: str, run_id: int, name: str, out_dir: str) -> l
     return saved
 
 
+def fetch_artifact_member(repo: str, run_id: int, artifact: str, member: str,
+                          out_dir: str) -> str:
+    """下载名称为 artifact 的制品 zip，取出其中 member 文件写入 out_dir。
+
+    blacklist-report 制品内同时有 xlsx 与 json，只取需要的 json；
+    制品不存在（上游该 job 为 continue-on-error）时直接失败，避免用空数据判定。
+    """
+    jq = f'.artifacts[] | select(.name | startswith("{artifact}")) | .id'
+    out = _gh_json([f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100",
+                    "--jq", jq])
+    aid = next((line.strip() for line in out.splitlines() if line.strip()), None)
+    if not aid:
+        raise SystemExit(f"artifact '{artifact}*' not found for run {run_id}")
+    data = _gh_bytes(f"repos/{repo}/actions/artifacts/{aid}/zip")
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        hit = next((n for n in z.namelist()
+                    if n == member or n.endswith("/" + member)), None)
+        if hit is None:
+            raise SystemExit(f"member '{member}' not found in artifact "
+                             f"'{artifact}' (run {run_id}); files={z.namelist()[:20]}")
+        payload = z.read(hit)
+    if not payload:
+        raise SystemExit(f"empty member '{member}' in artifact '{artifact}'")
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, os.path.basename(member))
+    with open(path, "wb") as f:
+        f.write(payload)
+    print(f"extracted {member} (artifact_id={aid}, run_id={run_id}) -> {path} "
+          f"({len(payload)} bytes)")
+    return path
+
+
 def trigger_workflow(repo: str, workflow: str, ref: str) -> int:
     """触发 workflow_dispatch（裸触发，无 inputs），返回 run_id（不等待）。"""
     _gh_cli(["workflow", "run", workflow, "--repo", repo, "--ref", ref])
@@ -201,6 +235,8 @@ def main() -> None:
                    help="等待该 run 完成并打印 conclusion")
     p.add_argument("--download-all", action="store_true",
                    help="下载所有 name 前缀匹配的 artifact 到 --out-dir")
+    p.add_argument("--artifact-member", default="",
+                   help="只取 artifact zip 内该文件（如 blacklist-report.json）到 --out-dir")
     p.add_argument("--out-dir", default="reports",
                    help="--download-all / --fetch-conf 时的输出目录")
     p.add_argument("--fetch-conf", action="store_true",
@@ -211,7 +247,7 @@ def main() -> None:
     a = p.parse_args()
 
     if a.fetch_conf:
-        # 文件清单以 blacklist_common.ALL_FILES 为准（U 依赖的 4 个文件），缺一即失败
+        # 文件清单以 blacklist_common.ALL_FILES 为准（U 依赖的 5 个文件），缺一即失败
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import blacklist_common as bc
         fetch_conf_files(a.repo, a.ref, a.conf_path, a.out_dir, list(bc.ALL_FILES))
@@ -227,7 +263,9 @@ def main() -> None:
         return
 
     run_id = a.run_id or find_run(a.repo, a.workflow)
-    if a.download_all:
+    if a.artifact_member:
+        fetch_artifact_member(a.repo, run_id, a.artifact, a.artifact_member, a.out_dir)
+    elif a.download_all:
         download_all_artifacts(a.repo, run_id, a.artifact, a.out_dir)
     else:
         download_artifact(a.repo, run_id, a.artifact, a.out)

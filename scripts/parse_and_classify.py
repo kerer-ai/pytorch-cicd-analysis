@@ -1,23 +1,23 @@
 # -*- coding: utf-8 -*-
-"""解析 + 平台标记层（方案 §4.2）：解析 test-reports-*.zip，产出 out/parsed_cases.json。
+"""解析 + 平台标记层（方案 §4.2）：产出 out/parsed_cases.json。
 
-数据源（三类，均为 test-reports 结构）：
+数据源：
   加入线：
     - nightly-main-full-a3.yml 的 test-reports 制品（source=full, platform=a3）
     - nightly-main-full-a5.yml 的 test-reports 制品（source=full, platform=a5）
   删减线：
-    - blacklist-test.yml 的 test-reports 复测产物（source=patrol, platform 自动识别）
+    - blacklist-test.yml 的 blacklist-report 制品内 blacklist-report.json
+      （source=patrol，逐 nodeid 已带 a3/a5 平台字段）
 
-制品结构（对齐 Go 侧 loadTestReportsCases / ParseShardCasesJSON）：
+制品结构：
   test-reports-*.zip 内包含 *_cases.json，结构为
   {shard, shard_type, cases:[{nodeid, status, message, file, ...}]}。
   平台上/下游可能是「浅」结构（*_cases.json 直接在外层 zip）或「深」结构
   （外层 zip 内含 test-reports-*.zip，再含 *_cases.json），本解析器两种都兼容。
 
 平台识别：
-  full 线依据 workflow 已知平台（显式）；patrol 线从文件名里的 a3/a5 字样自动判断
-  （依次看 zip 文件名、内层 test-reports-xx 文件名、*_cases.json 文件名），
-  识别不到则沿用上层传入的平台 hint（默认为空）。
+  full 线依据 workflow 已知平台（显式）；patrol 线直接取 blacklist-report.json
+  的 a3_status / a5_status 字段（某平台为 null 表示该平台未执行，不产记录）。
 
 输出：out/parsed_cases.json = {run_id, cases:[{nodeid, status, log, file, platform, source}]}
   - 按 (nodeid, platform) 首现保位去重（避免同平台 shard 内重复计数）。
@@ -108,19 +108,51 @@ def _dedupe(cases: list) -> list:
     return out
 
 
+def parse_blacklist_report(path: str) -> list:
+    """解析 blacklist-report.json（扁平数组，一行一个 U 内 nodeid）。
+
+    每行 {"nodeid", "a3_status", "a5_status", "a3_log", "a5_log"}；
+    某平台 status 为 null 表示该平台未执行，不产记录——
+    缺失即无观测，不能写成 skipped，否则会误打断连续判定。
+    """
+    if not path or not os.path.isfile(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        rows = json.load(f)
+    cases: list = []
+    for row in rows:
+        nodeid = (row.get("nodeid") or "").strip()
+        if not nodeid:
+            continue
+        for plat in ("a3", "a5"):
+            status = row.get(f"{plat}_status")
+            if not status:
+                continue
+            cases.append({
+                "nodeid": nodeid,
+                "status": status,
+                "log": row.get(f"{plat}_log") or "",
+                "file": "",
+                "platform": plat,
+                "source": "patrol",
+            })
+    return cases
+
+
 def main() -> None:
-    p = argparse.ArgumentParser(description="解析 test-reports 制品（三类数据源）")
+    p = argparse.ArgumentParser(description="解析上游制品（full test-reports + patrol 报告）")
     p.add_argument("--run-id", type=int, required=True)
     p.add_argument("--out", default="out/parsed_cases.json")
     p.add_argument("--full-a3-dir", default="", help="加入线 full-a3 报告目录")
     p.add_argument("--full-a5-dir", default="", help="加入线 full-a5 报告目录")
-    p.add_argument("--patrol-dir", default="", help="删减线 blacklist-test 复测报告目录")
+    p.add_argument("--patrol-report", default="",
+                   help="删减线 blacklist-report.json 路径")
     a = p.parse_args()
 
     all_cases: list = []
     all_cases += parse_reports_dir(a.full_a3_dir, "full", "a3")
     all_cases += parse_reports_dir(a.full_a5_dir, "full", "a5")
-    all_cases += parse_reports_dir(a.patrol_dir, "patrol", "")
+    all_cases += parse_blacklist_report(a.patrol_report)
     cases = _dedupe(all_cases)
 
     out_dir = os.path.dirname(a.out)

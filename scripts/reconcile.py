@@ -13,7 +13,8 @@
      跨轮连续判定的唯一状态，与候选多少无关，恒写入）。
 
 补丁由人工在上游仓库根目录 `git apply -p1 <patch>` 应用；本仓库不写黑名单本身。
-serialize/roundtrip 保证补丁是最小 diff（4 个上游文件均字节级 roundtrip 通过）。
+类型 A/B/C 四个文件经 serialize/roundtrip 保证最小 diff；a3a5_log_diff 的 log 为
+数组、格式不同，不自动改写，其 remove 候选记入 skipped_removes 交人工。
 """
 from __future__ import annotations
 
@@ -97,7 +98,12 @@ def build_blacklist_patch(add, remove, conf_dir, patch_out) -> dict:
         removes_by.setdefault(r["source_file"], []).append(r)
 
     diffs, applied_adds, applied_removes, skipped = [], 0, 0, []
+    skipped_removes = []
     for filename in sorted(set(adds_by) | set(removes_by)):
+        if filename in bc.INDEX_ONLY_FILES:
+            # a3a5_log_diff 的 log 为数组、格式与类型 A 不同，自动改写风险高，交人工
+            skipped_removes.extend(r["nodeid"] for r in removes_by.get(filename, []))
+            continue
         path = os.path.join(conf_dir, filename)
         with open(path, encoding="utf-8", newline="") as f:
             raw = f.read()
@@ -126,7 +132,7 @@ def build_blacklist_patch(add, remove, conf_dir, patch_out) -> dict:
         f.write(text)
     return {"patch": patch_out, "applied_adds": applied_adds,
             "applied_removes": applied_removes, "skipped_adds": skipped,
-            "patch_bytes": len(text)}
+            "skipped_removes": skipped_removes, "patch_bytes": len(text)}
 
 
 def _load_history(history_dir):
@@ -154,6 +160,9 @@ def _write_summary_md(add, remove, moved, pending, u_size, out_dir, patch_info=N
         ]
         if patch_info["skipped_adds"]:
             lines.append(f"- 未能定位 log 分组、需人工处理: {len(patch_info['skipped_adds'])}")
+        if patch_info.get("skipped_removes"):
+            lines.append(f"- 位于 a3a5_log_diff、补丁未自动改写、需人工处理: "
+                         f"{len(patch_info['skipped_removes'])}")
         lines += ["", "本仓库不落盘黑名单；补丁请在上游仓库根目录 `git apply -p1 <patch>` 应用。", ""]
     else:
         lines += ["", "本仓库不落盘黑名单；候选请人工应用回上游 `Ascend/pytorch` ci-test 分支 conf。", ""]

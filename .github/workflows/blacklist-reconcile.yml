@@ -15,14 +15,15 @@ name: Blacklist Auto Reconcile
 #   - 拉数据：gh api 只读拉取 Ascend/pytorch，须用 secrets.ASCEND_PAT
 #     （仓库约束：访问 Ascend/pytorch 须用 PAT，不能用 github.token）。
 #
-# 数据源（三路，均为 test-reports 结构）：
+# 数据源（三路）：
 #   加入线（§2 / §6.1）：
 #     - nightly-main-full-a3.yml 的 test-reports 制品 -> platform=a3
 #     - nightly-main-full-a5.yml 的 test-reports 制品 -> platform=a5
 #       （a3/a5 排除黑名单后的全量 nodeid 执行结果）
 #   删减线（§2 / §6.2）：
-#     - blacklist-test.yml：本流水线先触发（ci-test 分支、无参）再拉结果，
-#       为「已在黑名单」的 nodeid 的复测结果，platform 按文件名 a3/a5 自动识别。
+#     - blacklist-test.yml：本流水线先触发（ci-test 分支、无参）并等待完成，
+#       再直接取上游聚合好的 blacklist-report.json（一行一个 U 内 nodeid，
+#       自带 a3_status / a5_status 与日志，无需下载全部 shard 再猜平台）。
 
 on:
   schedule:
@@ -116,17 +117,20 @@ jobs:
           fi
 
       # 5. 拉删减线复测结果（已确认上游成功才会走到这里）
-      - name: Download blacklist-test reports (删减线)
+      #    直接取上游聚合好的 blacklist-report.json：一行一个 U 内 nodeid，
+      #    自带 a3_status / a5_status / 日志，无需下载全部 shard 再猜平台
+      - name: Download blacklist-report (删减线)
         env:
           GH_TOKEN: ${{ secrets.ASCEND_PAT }}
           RUN_ID: ${{ steps.trigger.outputs.run_id }}
         run: |
           set -euo pipefail
           python3 scripts/fetch_upstream.py \
-            --run-id "$RUN_ID" --artifact test-reports \
-            --download-all --out-dir reports/patrol
+            --run-id "$RUN_ID" --artifact blacklist-report \
+            --artifact-member blacklist-report.json \
+            --out-dir reports/patrol
 
-      # 6. 解析三源 -> out/parsed_cases.json（full=显式平台，patrol=文件名识别平台）
+      # 6. 解析三源 -> out/parsed_cases.json（full=显式平台，patrol=报告字段）
       - name: Parse & classify
         env:
           RUN_ID: ${{ steps.trigger.outputs.run_id }}
@@ -137,7 +141,7 @@ jobs:
             --out out/parsed_cases.json \
             --full-a3-dir reports/full-a3 \
             --full-a5-dir reports/full-a5 \
-            --patrol-dir reports/patrol
+            --patrol-report reports/patrol/blacklist-report.json
 
       # 7. 对账（纯分析：候选 + 上游格式补丁都进制品，本仓库不写黑名单本体）
       - name: Reconcile (analysis + patch)

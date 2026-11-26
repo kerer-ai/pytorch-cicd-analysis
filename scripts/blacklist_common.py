@@ -46,11 +46,16 @@ ISSUE_BY_CATEGORY = {
 # ---------------------------------------------------------------------------
 FILE_DTYPE = "dtype_unsupported_testcases.json"      # 类型 A
 FILE_HARDWARE = "hardware_unsupported_testcases.json"  # 类型 A
+FILE_A3A5 = "a3a5_log_diff_testcases.json"            # 类型 A 变体（log 为字符串数组）
 FILE_TEMP = "temporary_skiped_grouped.json"           # 类型 B
 FILE_PLATFORM = "platform_passed_diff.json"           # 类型 C
 
+# 类型 A 精确匹配库只收 log 为单个字符串的文件；a3a5 的 log 是数组，
+# 无法与单条失败日志整串比对，因此只参与 U/索引，不参与 classify_log。
 TYPE_A_FILES = (FILE_DTYPE, FILE_HARDWARE)
-ALL_FILES = (FILE_DTYPE, FILE_HARDWARE, FILE_TEMP, FILE_PLATFORM)
+# 仅参与「U + 索引」的类型 A 变体（可被 remove 命中，但补丁不自动改写）
+INDEX_ONLY_FILES = (FILE_A3A5,)
+ALL_FILES = (FILE_DTYPE, FILE_HARDWARE, FILE_A3A5, FILE_TEMP, FILE_PLATFORM)
 
 # ---------------------------------------------------------------------------
 # §5 日志匹配词表（顺序子串匹配，命中即返回；行内任一关键词命中即返回该行 category）
@@ -145,8 +150,18 @@ def roundtrip_check_type_a(config_dir: str) -> None:
 # ---------------------------------------------------------------------------
 # 全集 U 与索引（§7 collect_nodeids / 一致性校验）
 # ---------------------------------------------------------------------------
+def load_extra_entries(config_dir: str) -> List[Tuple[str, List[dict]]]:
+    """加载仅参与 U/索引的类型 A 变体文件（a3a5_log_diff_testcases.json）。"""
+    out: List[Tuple[str, List[dict]]] = []
+    for filename in INDEX_ONLY_FILES:
+        path = os.path.join(config_dir, filename)
+        if os.path.exists(path):
+            out.append((filename, load_json(path)))
+    return out
+
+
 def collect_nodeids(config_dir: str) -> set:
-    """生成全集 U：类型 A nodeids + 类型 B nodes + 类型 C passed_a3/a5。"""
+    """生成全集 U：类型 A（含 a3a5 变体）nodeids + 类型 B nodes + 类型 C passed_a3/a5。"""
     nodeids: set = set()
     cfg_dir = config_dir
     for filename in ALL_FILES:
@@ -154,7 +169,7 @@ def collect_nodeids(config_dir: str) -> set:
         if not os.path.exists(path):
             continue
         data = load_json(path)
-        if filename in TYPE_A_FILES:
+        if filename in TYPE_A_FILES or filename in INDEX_ONLY_FILES:
             for ent in data:
                 nodeids.update(ent.get("nodeids", {}).keys())
         elif filename == FILE_TEMP:
@@ -168,11 +183,13 @@ def collect_nodeids(config_dir: str) -> set:
 
 def build_index_from_data(type_a_entries: List[Tuple[str, List[dict]]],
                           temp_data: Optional[dict] = None,
-                          platform_data: Optional[dict] = None) -> dict:
+                          platform_data: Optional[dict] = None,
+                          extra_entries: Optional[List[Tuple[str, List[dict]]]] = None) -> dict:
     """从已加载的 conf 数据构建 nodeid -> {"file", "category", "issue"} 索引。
 
     数据来自运行时拉取的上游 conf（fetch_upstream.py --fetch-conf），
     本仓库不再维护黑名单静态副本；build_index(dir) 是本函数的按目录加载版。
+    extra_entries 为仅参与 U/索引的变体文件，使用 setdefault 以免覆盖主分类信息。
     """
     index: dict = {}
     for filename, entries in type_a_entries:
@@ -184,6 +201,15 @@ def build_index_from_data(type_a_entries: List[Tuple[str, List[dict]]],
                     "category": cat,
                     "issue": meta.get("issue", "") if isinstance(meta, dict) else "",
                 }
+    for filename, entries in (extra_entries or []):
+        for ent in entries:
+            cat = ent.get("category", "")
+            for nid, meta in ent.get("nodeids", {}).items():
+                index.setdefault(nid, {
+                    "file": filename,
+                    "category": cat,
+                    "issue": meta.get("issue", "") if isinstance(meta, dict) else "",
+                })
     if temp_data:
         for g in temp_data.get("groups", []):
             for nid in g.get("nodes", []):
@@ -210,6 +236,7 @@ def build_index(config_dir: str) -> dict:
         load_type_a(config_dir),
         _load_json_if_exists(os.path.join(config_dir, FILE_TEMP)),
         _load_json_if_exists(os.path.join(config_dir, FILE_PLATFORM)),
+        load_extra_entries(config_dir),
     )
 
 
