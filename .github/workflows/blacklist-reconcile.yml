@@ -81,6 +81,7 @@ jobs:
 
       # 2. 拉加入线 full-a3 / full-a5：最近 3 次成功 run，各自落 <run_id>/ 子目录
       #    单次运行即构成连续序列，不再依赖跨轮本地历史
+      #    注意：这两个 nightly workflow 的 run 实际都在 ci-test 分支（非 main）
       - name: Download recent full-a3 / full-a5 (加入线)
         env:
           GH_TOKEN: ${{ secrets.ASCEND_PAT }}
@@ -88,10 +89,10 @@ jobs:
           set -euo pipefail
           python3 scripts/fetch_upstream.py \
             --workflow nightly-main-full-a3.yml --artifact test-reports \
-            --recent 3 --branch main --download-all --out-dir reports/full-a3
+            --recent 3 --branch ci-test --download-all --out-dir reports/full-a3
           python3 scripts/fetch_upstream.py \
             --workflow nightly-main-full-a5.yml --artifact test-reports \
-            --recent 3 --branch main --download-all --out-dir reports/full-a5
+            --recent 3 --branch ci-test --download-all --out-dir reports/full-a5
 
       # 3. 运行时拉取上游黑名单 conf（构建 U/索引/匹配库的唯一数据源，本仓库不存副本）
       - name: Fetch upstream blacklist conf
