@@ -19,8 +19,14 @@
   full 线依据 workflow 已知平台（显式）；patrol 线直接取 blacklist-report.json
   的 a3_status / a5_status 字段（某平台为 null 表示该平台未执行，不产记录）。
 
-输出：out/parsed_cases.json = {run_id, cases:[{nodeid, status, log, file, platform, source}]}
-  - 按 (nodeid, platform) 首现保位去重（避免同平台 shard 内重复计数）。
+多轮窗口：
+  每条线都取「最近 RECENT_RUNS 次」上游 run，各自落在 <root>/<run_id>/ 下，
+  run.json 记录 created_at；解析时逐 run 打 run_id/ts，判定阶段即可一次性
+  构成连续序列（不再依赖跨轮本地历史）。
+
+输出：out/parsed_cases.json =
+  {run_id, runs:[...], cases:[{nodeid, status, log, file, platform, source, run_id, ts}]}
+  - 按 (nodeid, platform, run_id) 首现保位去重（避免同平台 shard 内重复计数）。
   - log 取自 message 字段（§3.1 的 log）。
 """
 from __future__ import annotations
@@ -95,12 +101,61 @@ def parse_reports_dir(directory: str, source: str, platform: str) -> list:
     return cases
 
 
+def _iter_run_dirs(root: str) -> list:
+    """遍历 root 下的 run 子目录，返回 [(run_id, ts, path)]，按 ts 升序。"""
+    out: list = []
+    if not root or not os.path.isdir(root):
+        return out
+    for name in sorted(os.listdir(root)):
+        path = os.path.join(root, name)
+        if not os.path.isdir(path):
+            continue
+        run_id, ts = 0, ""
+        meta_path = os.path.join(path, "run.json")
+        if os.path.isfile(meta_path):
+            try:
+                with open(meta_path, encoding="utf-8") as f:
+                    meta = json.load(f)
+                run_id = int(meta.get("run_id") or 0)
+                ts = meta.get("ts") or ""
+            except (json.JSONDecodeError, ValueError, TypeError):
+                pass
+        if not run_id and name.isdigit():
+            run_id = int(name)
+        if run_id:
+            out.append((run_id, ts, path))
+    out.sort(key=lambda x: (x[1], x[0]))
+    return out
+
+
+def parse_full_dir(root: str, platform: str) -> list:
+    """解析某平台最近 N 次 full 报告目录，逐 run 打 run_id/ts。"""
+    cases: list = []
+    for run_id, ts, path in _iter_run_dirs(root):
+        for c in parse_reports_dir(path, "full", platform):
+            c["run_id"] = run_id
+            c["ts"] = ts
+            cases.append(c)
+    return cases
+
+
+def parse_patrol_dir(root: str) -> list:
+    """解析最近 N 次 blacklist-report.json，逐 run 打 run_id/ts。"""
+    cases: list = []
+    for run_id, ts, path in _iter_run_dirs(root):
+        for c in parse_blacklist_report(os.path.join(path, "blacklist-report.json")):
+            c["run_id"] = run_id
+            c["ts"] = ts
+            cases.append(c)
+    return cases
+
+
 def _dedupe(cases: list) -> list:
-    """按 (nodeid, platform) 首现保位去重。"""
+    """按 (nodeid, platform, run_id) 首现保位去重（同 run 内 shard 重复计数）。"""
     seen = set()
     out = []
     for c in cases:
-        key = (c["nodeid"], c["platform"])
+        key = (c["nodeid"], c["platform"], c.get("run_id", 0))
         if key in seen:
             continue
         seen.add(key)
@@ -141,25 +196,28 @@ def parse_blacklist_report(path: str) -> list:
 
 def main() -> None:
     p = argparse.ArgumentParser(description="解析上游制品（full test-reports + patrol 报告）")
-    p.add_argument("--run-id", type=int, required=True)
+    p.add_argument("--run-id", type=int, required=True, help="本次触发的 run id（仅元信息）")
     p.add_argument("--out", default="out/parsed_cases.json")
-    p.add_argument("--full-a3-dir", default="", help="加入线 full-a3 报告目录")
-    p.add_argument("--full-a5-dir", default="", help="加入线 full-a5 报告目录")
-    p.add_argument("--patrol-report", default="",
-                   help="删减线 blacklist-report.json 路径")
+    p.add_argument("--full-a3-dir", default="",
+                   help="加入线 full-a3 报告根目录（内含 <run_id>/ 子目录）")
+    p.add_argument("--full-a5-dir", default="",
+                   help="加入线 full-a5 报告根目录（内含 <run_id>/ 子目录）")
+    p.add_argument("--patrol-dir", default="",
+                   help="删减线根目录（内含 <run_id>/blacklist-report.json）")
     a = p.parse_args()
 
     all_cases: list = []
-    all_cases += parse_reports_dir(a.full_a3_dir, "full", "a3")
-    all_cases += parse_reports_dir(a.full_a5_dir, "full", "a5")
-    all_cases += parse_blacklist_report(a.patrol_report)
+    all_cases += parse_full_dir(a.full_a3_dir, "a3")
+    all_cases += parse_full_dir(a.full_a5_dir, "a5")
+    all_cases += parse_patrol_dir(a.patrol_dir)
     cases = _dedupe(all_cases)
 
     out_dir = os.path.dirname(a.out)
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
+    runs = sorted({c.get("run_id", 0) for c in cases})
     with open(a.out, "w", encoding="utf-8") as f:
-        json.dump({"run_id": a.run_id, "cases": cases}, f,
+        json.dump({"run_id": a.run_id, "runs": runs, "cases": cases}, f,
                   ensure_ascii=False, indent=2)
 
     def _count(src, plat=""):
@@ -168,6 +226,7 @@ def main() -> None:
 
     failed = [c for c in cases if bc.is_failed(c["status"])]
     print(f"parsed_cases: total={len(cases)} failed={len(failed)} "
+          f"runs={len(runs)} "
           f"full_a3={_count('full', 'a3')} full_a5={_count('full', 'a5')} "
           f"patrol={_count('patrol')}")
     print(f"written {a.out}")

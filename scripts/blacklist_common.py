@@ -2,15 +2,16 @@
 """黑名单动态管理（自动加入 + 自动删减）共享模块。
 
 提供黑名单三类文件的加载与序列化（类型 A 保持字节级 roundtrip）、全集 U 与
-索引构建、日志精确匹配与词表粗分、跨轮状态序列与连续计数等基础能力。
+索引构建、日志分组匹配（log 数组整串相等 / 片段包含）与词表粗分、状态序列与
+连续计数等基础能力。
 
 本文件被 fetch_upstream / parse_and_classify / judge / reconcile 共同引用，
 只依赖标准库，无第三方依赖。
 
-黑名单数据源（重构后）：本仓库不保存黑名单副本；U / 索引 / 日志精确匹配库
+黑名单数据源（重构后）：本仓库不保存黑名单副本；U / 索引 / 日志匹配库
 每轮运行时从上游 ci-test conf 拉取（fetch_upstream.py --fetch-conf），
 本模块的 *_dir 参数一律指向该运行时目录。serialize_type_a / roundtrip_check_type_a
-仅在需要生成上游格式 patch 时使用，保留备用。
+用于生成与上游格式一致的 patch。
 """
 from __future__ import annotations
 
@@ -27,12 +28,14 @@ CATEGORY_DEVICE = "device not supported"    # DT_DOUBLE/DT_COMPLEX 硬件不支�
 CATEGORY_CANN = "cann not supported"        # contiguous / 维度等 CANN 限制
 CATEGORY_TEMP = "temporarily skipped"       # 临时跳过
 
-# 增删阈值 N：自动类 N=3，保守类 N=5（§1.4；N 值标定待确认 §9.3）
+# 连续判定阈值 N：单次运行即拉取上游最近 RECENT_RUNS 次结果构成序列，
+# 因此所有类别统一为 RECENT_RUNS（3），否则 N=5 在 3 次窗口内永远无法满足。
+RECENT_RUNS = 3
 THRESHOLDS = {
-    CATEGORY_DTYPE: 3,
-    CATEGORY_DEVICE: 5,
-    CATEGORY_CANN: 5,
-    CATEGORY_TEMP: 3,
+    CATEGORY_DTYPE: RECENT_RUNS,
+    CATEGORY_DEVICE: RECENT_RUNS,
+    CATEGORY_CANN: RECENT_RUNS,
+    CATEGORY_TEMP: RECENT_RUNS,
 }
 
 # issue 默认映射（对齐 conf/UNSUPPORTED.json 的 category_issues；§9.4 待确认）
@@ -50,16 +53,16 @@ FILE_A3A5 = "a3a5_log_diff_testcases.json"            # 类型 A 变体（log �
 FILE_TEMP = "temporary_skiped_grouped.json"           # 类型 B
 FILE_PLATFORM = "platform_passed_diff.json"           # 类型 C
 
-# 类型 A 精确匹配库只收 log 为单个字符串的文件；a3a5 的 log 是数组，
-# 无法与单条失败日志整串比对，因此只参与 U/索引，不参与 classify_log。
+# 参与日志匹配与补丁改写的类型 A 文件。
 TYPE_A_FILES = (FILE_DTYPE, FILE_HARDWARE)
-# 仅参与「U + 索引」的类型 A 变体（可被 remove 命中，但补丁不自动改写）
+# a3a5_log_diff 每个分组是「a3 与 a5 观测日志不一致」的组合，新增时无法可靠
+# 定位分组，因此只参与「U + 索引」（可被 remove 命中，但补丁不自动改写）。
 INDEX_ONLY_FILES = (FILE_A3A5,)
 ALL_FILES = (FILE_DTYPE, FILE_HARDWARE, FILE_A3A5, FILE_TEMP, FILE_PLATFORM)
 
 # ---------------------------------------------------------------------------
 # §5 日志匹配词表（顺序子串匹配，命中即返回；行内任一关键词命中即返回该行 category）
-# 仅在精确匹配未命中时用作「新类」候选分类（hit=False，不自动建组）。
+# 仅在日志分组匹配未命中时用作「新类」候选分类（hit=False，不自动建组）。
 # 大小写不敏感（对齐仓库 UNSUPPORTED.json 的匹配惯例）。
 # ---------------------------------------------------------------------------
 WORD_TABLE: List[Tuple[Tuple[str, ...], str]] = [
@@ -83,13 +86,29 @@ def load_json(path: str):
         return json.load(f)
 
 
+def normalize_logs(value) -> List[str]:
+    """把 conf 的 log 字段归一化为字符串列表（兼容旧的单字符串写法）。
+
+    上游现格式：log 为数组，一个元素代表一条观测到的错误；元素里用 `|`
+    连接多个片段时，表示同一错误消息里必须同时出现这些片段。
+    """
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, list):
+        return [x for x in value if isinstance(x, str) and x]
+    return []
+
+
 # ---------------------------------------------------------------------------
 # 类型 A 序列化（§1.3 字节级 roundtrip 硬约束）
 #
 # 输出格式（非标准 json.dump(indent=2)）：
 #   [
 #     {
-#       "log": "...",
+#       "log": [
+#         "...",
+#         "..."
+#       ],
 #       "category": "...",
 #       "nodeids": {
 #         "nodeid": {"cann": "", "issue": "..."},
@@ -98,8 +117,9 @@ def load_json(path: str):
 #     },
 #     ...
 #   ]
-# 顶层 `[`；entry `{` 缩进 2；key 缩进 4；nodeid 缩进 6；内层 {cann, issue} 单行
-# （json.dumps 默认分隔符）；文件末尾 `]\n`。
+# 顶层 `[`；entry `{` 缩进 2；key 缩进 4；log 元素与 nodeid 缩进 6；
+# 内层 {cann, issue} 单行（json.dumps 默认分隔符）；空数组写作两行 `[` + `],`；
+# 文件末尾 `]\n`。key 顺序沿用原文件（log, category, nodeids）。
 # ---------------------------------------------------------------------------
 def serialize_type_a(entries: Iterable[dict]) -> str:
     entries = list(entries)
@@ -109,16 +129,29 @@ def serialize_type_a(entries: Iterable[dict]) -> str:
     n = len(entries)
     for i, ent in enumerate(entries):
         lines.append("  {")
-        lines.append('    "log": ' + json.dumps(ent["log"], ensure_ascii=False) + ",")
-        lines.append('    "category": ' + json.dumps(ent["category"], ensure_ascii=False) + ",")
-        lines.append('    "nodeids": {')
-        nodeids = ent.get("nodeids", {})
-        nids = list(nodeids.keys())
-        for j, nid in enumerate(nids):
-            comma = "," if j < len(nids) - 1 else ""
-            meta = json.dumps(nodeids[nid], ensure_ascii=False)  # {"cann": "...", "issue": "..."}
-            lines.append("      " + json.dumps(nid, ensure_ascii=False) + ": " + meta + comma)
-        lines.append("    }")
+        keys = list(ent.keys())
+        for k, key in enumerate(keys):
+            last = k == len(keys) - 1
+            if key == "log":
+                logs = normalize_logs(ent.get("log"))
+                lines.append('    "log": [')
+                for j, item in enumerate(logs):
+                    comma = "," if j < len(logs) - 1 else ""
+                    lines.append("      " + json.dumps(item, ensure_ascii=False) + comma)
+                lines.append("    ]" + ("" if last else ","))
+            elif key == "nodeids":
+                lines.append('    "nodeids": {')
+                nodeids = ent.get("nodeids") or {}
+                nids = list(nodeids.keys())
+                for j, nid in enumerate(nids):
+                    comma = "," if j < len(nids) - 1 else ""
+                    meta = json.dumps(nodeids[nid], ensure_ascii=False)  # {"cann": "...", "issue": "..."}
+                    lines.append("      " + json.dumps(nid, ensure_ascii=False) + ": " + meta + comma)
+                lines.append("    }" + ("" if last else ","))
+            else:
+                lines.append("    " + json.dumps(key, ensure_ascii=False) + ": "
+                             + json.dumps(ent[key], ensure_ascii=False)
+                             + ("" if last else ","))
         lines.append("  }" + ("," if i < n - 1 else ""))
     lines.append("]")
     return "\n".join(lines) + "\n"
@@ -241,28 +274,54 @@ def build_index(config_dir: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 日志匹配（§4.2 / §5）两档
+# 日志匹配（§4.2 / §5）三档
 # ---------------------------------------------------------------------------
 @dataclass
 class ClassifyResult:
     category: str
-    hit: bool                       # True=精确匹配（可归组），False=新类待人工确认
-    source_file: Optional[str] = None   # 精确命中时所在文件名
-    group_log: Optional[str] = None     # 精确命中时归组 key（entry["log"]）
+    hit: bool                       # True=命中已有日志分组（可归组），False=新类待人工确认
+    source_file: Optional[str] = None   # 命中所在文件名
+    group_log: Optional[str] = None     # 命中的 log 元素（补丁据此定位分组）
+
+
+def _log_fragments(element: str) -> List[str]:
+    """log 元素按 `|` 拆片段；全部片段都出现才算同一错误。"""
+    return [f.strip() for f in element.split("|") if f.strip()]
+
+
+def _element_in_message(element: str, message: str) -> bool:
+    frags = _log_fragments(element)
+    return bool(frags) and all(f in message for f in frags)
 
 
 def classify_log(log: str, type_a_entries: List[Tuple[str, List[dict]]]) -> ClassifyResult:
-    """两档匹配：1) 精确匹配 entry["log"]；2) §5 词表规则粗分。"""
+    """三档匹配：1) log 元素整串相等；2) 片段全部包含（取最长命中）；
+    3) §5 词表规则粗分。
+
+    conf 的 log 是数组，一个元素代表一条观测到的错误；元素用 `|` 连接片段时，
+    要求这些片段同时出现在同一条失败日志里。
+    """
     log = (log or "").strip()
     if not log:
         return ClassifyResult("", False)
-    # 1. 精确匹配
+    # 1. 整串相等
     for filename, entries in type_a_entries:
         for ent in entries:
-            if (ent.get("log") or "").strip() == log:
-                return ClassifyResult(
-                    ent.get("category", ""), True, filename, ent.get("log", "")
-                )
+            for item in normalize_logs(ent.get("log")):
+                if item.strip() == log:
+                    return ClassifyResult(ent.get("category", ""), True,
+                                          filename, item.strip())
+    # 2. 片段包含：取命中元素最长的一条，避免短片段抢占更具体的分组
+    best: Optional[Tuple[int, str, str, str]] = None
+    for filename, entries in type_a_entries:
+        for ent in entries:
+            for item in normalize_logs(ent.get("log")):
+                if _element_in_message(item, log):
+                    cand = (len(item), filename, ent.get("category", ""), item)
+                    if best is None or cand[0] > best[0]:
+                        best = cand
+    if best is not None:
+        return ClassifyResult(best[2], True, best[1], best[3])
     # 2. 规则粗分（候选 category，标记为新类待人工确认）
     low = log.lower()
     for keywords, cat in WORD_TABLE:
@@ -273,7 +332,7 @@ def classify_log(log: str, type_a_entries: List[Tuple[str, List[dict]]]) -> Clas
 
 
 # ---------------------------------------------------------------------------
-# status_history（§3.2）读写与跨轮聚合
+# 状态序列与连续计数（记录来自「最近 RECENT_RUNS 次上游 run」窗口，非本地历史）
 # ---------------------------------------------------------------------------
 def status_series(records: List[dict], nodeid: str, platform: str,
                   source: Optional[str] = None) -> List[str]:

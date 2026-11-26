@@ -4,17 +4,17 @@
 数据流：
   1. 运行时读取上游 conf（fetch_upstream.py --fetch-conf 拉取到 --upstream-conf-dir），
      构建 U / 索引 / 日志精确匹配库；本仓库不保存黑名单副本。
-  2. 读 parsed_cases.json；读 status_history 并追加本轮 join + patrol 记录。
-  3. judge_add / judge_remove 判定（judge.py）。
+  2. 读 parsed_cases.json（已含上游最近 N 次 run 的观测，带 run_id/ts），
+     装配 join + patrol 序列；不再依赖跨轮本地历史。
+  3. judge_add / judge_remove 判定（judge.py），阈值统一 N=RECENT_RUNS。
   4. 输出 out/candidates.json + out/audit_preview.json + out/summary.md（制品，人工消费）。
   5. 把 add/remove 应用到 conf 内存副本，生成 out/blacklist_update.patch
      （针对上游 ci-test 分支路径的 unified diff，空变更时为空文件）。
-  6. 每轮持久化 status_history/<date>_<run_id>.json（仅本轮新记录；
-     跨轮连续判定的唯一状态，与候选多少无关，恒写入）。
 
 补丁由人工在上游仓库根目录 `git apply -p1 <patch>` 应用；本仓库不写黑名单本身。
-类型 A/B/C 四个文件经 serialize/roundtrip 保证最小 diff；a3a5_log_diff 的 log 为
-数组、格式不同，不自动改写，其 remove 候选记入 skipped_removes 交人工。
+类型 A/B/C 文件经 serialize/roundtrip 保证最小 diff；a3a5_log_diff 的分组是
+「a3 与 a5 日志不一致」的组合，新增无法可靠定位分组，不自动改写，其 remove
+候选记入 skipped_removes 交人工。
 """
 from __future__ import annotations
 
@@ -40,16 +40,21 @@ def _serialize_conf(filename: str, data) -> str:
 
 
 def _apply_adds(data, filename: str, adds: list):
-    """把 add 候选并入 conf 数据；返回 (已应用数, 无法定位 log 分组的 nodeid 列表)。"""
+    """把 add 候选并入 conf 数据；返回 (已应用数, 无法定位 log 分组的 nodeid 列表)。
+
+    conf 的 log 是数组，按其中每个元素建立「元素 -> 分组」映射；
+    候选自带 group_log（判定阶段命中的那个元素），据此定位插入分组。
+    """
     if filename not in bc.TYPE_A_FILES:
         # 非类型 A 无 log 分组，无法自动定位插入点，交人工
         return 0, [a["nodeid"] for a in adds]
     by_log = {}
     for ent in data:
-        by_log.setdefault((ent.get("log") or "").strip(), ent)
+        for item in bc.normalize_logs(ent.get("log")):
+            by_log.setdefault(item.strip(), ent)
     applied, skipped = 0, []
     for a in adds:
-        ent = by_log.get(a["log"].strip())
+        ent = by_log.get((a.get("group_log") or "").strip())
         if ent is None:
             skipped.append(a["nodeid"])
             continue
@@ -101,7 +106,7 @@ def build_blacklist_patch(add, remove, conf_dir, patch_out) -> dict:
     skipped_removes = []
     for filename in sorted(set(adds_by) | set(removes_by)):
         if filename in bc.INDEX_ONLY_FILES:
-            # a3a5_log_diff 的 log 为数组、格式与类型 A 不同，自动改写风险高，交人工
+            # a3a5 的分组是 a3/a5 日志组合，补丁改写易改错分组，交人工
             skipped_removes.extend(r["nodeid"] for r in removes_by.get(filename, []))
             continue
         path = os.path.join(conf_dir, filename)
@@ -135,21 +140,12 @@ def build_blacklist_patch(add, remove, conf_dir, patch_out) -> dict:
             "skipped_removes": skipped_removes, "patch_bytes": len(text)}
 
 
-def _load_history(history_dir):
-    """聚合 status_history/ 下所有轮次文件（每文件只含该轮记录）。"""
-    records = []
-    if os.path.isdir(history_dir):
-        for name in sorted(os.listdir(history_dir)):
-            if name.endswith(".json"):
-                with open(os.path.join(history_dir, name), encoding="utf-8") as f:
-                    records.extend(json.load(f))
-    return records
-
-
-def _write_summary_md(add, remove, moved, pending, u_size, out_dir, patch_info=None):
+def _write_summary_md(add, remove, moved, pending, u_size, out_dir,
+                      patch_info=None, run_count=0):
     lines = [
         "## 黑名单自动对账候选", "",
         f"- 黑名单全集 U（上游 conf 运行时构建）: {u_size}",
+        f"- 判定窗口（上游最近 N 次 run）: {run_count} 轮，阈值 N={bc.RECENT_RUNS}",
         f"- add: {len(add)}", f"- remove: {len(remove)}",
         f"- move_passed: {len(moved)}", f"- new_class_pending: {len(pending)}", "",
     ]
@@ -191,7 +187,6 @@ def main() -> None:
     p.add_argument("--parsed", required=True)
     p.add_argument("--upstream-conf-dir", required=True,
                    help="运行时拉取的上游 conf 目录（fetch_upstream.py --fetch-conf）")
-    p.add_argument("--history-dir", default="status_history")
     p.add_argument("--out", default="out")
     p.add_argument("--patch-out", default="out/blacklist_update.patch",
                    help="黑名单更新补丁输出路径（空变更时为空文件）")
@@ -206,12 +201,12 @@ def main() -> None:
     index = bc.build_index(a.upstream_conf_dir)
     u_size = len(bc.collect_nodeids(a.upstream_conf_dir))
 
-    # 2. 历史 + 本轮记录
-    parsed = json.load(open(a.parsed, encoding="utf-8"))["cases"]
-    hist = _load_history(a.history_dir)
-    join_new = judge.build_join_records(parsed, index, a.run_id, ts, hist)
-    patrol_new = judge.build_patrol_records(parsed, index, a.run_id, ts)
-    records = hist + join_new + patrol_new
+    # 2. 判定窗口记录（最近 N 次上游 run 的观测，含断连哨兵）
+    payload = json.load(open(a.parsed, encoding="utf-8"))
+    parsed = payload["cases"]
+    run_count = len({c.get("run_id", 0) for c in parsed})
+    records = (judge.build_join_records(parsed, index)
+               + judge.build_patrol_records(parsed, index))
 
     # 3. 判定
     add, pending = judge.judge_add(parsed, index, type_a_entries, records)
@@ -226,26 +221,20 @@ def main() -> None:
     # 4b. 把候选应用到 conf 内存副本 -> 上游格式补丁（不写本仓库黑名单）
     patch_info = build_blacklist_patch(add, remove, a.upstream_conf_dir, a.patch_out)
 
-    # 5. 持久化本轮历史：仅写本轮新记录（写全量会跨轮重复计数），恒写入
-    new_records = join_new + patrol_new
-    if new_records:
-        os.makedirs(a.history_dir, exist_ok=True)
-        hist_file = os.path.join(a.history_dir, f"{ts[:10]}_{a.run_id}.json")
-        with open(hist_file, "w", encoding="utf-8") as f:
-            json.dump(new_records, f, ensure_ascii=False, indent=2)
-
     audit_preview = {"run_id": a.run_id, "ts": ts, "u_size": u_size,
+                     "window_runs": run_count, "threshold": bc.RECENT_RUNS,
                      "added": len(add), "removed": len(remove),
                      "moved_passed": len(moved), "new_class_pending": len(pending),
-                     "history_records": len(new_records),
+                     "window_records": len(records),
                      "patch": patch_info}
     with open(os.path.join(a.out, "audit_preview.json"), "w", encoding="utf-8") as f:
         json.dump(audit_preview, f, ensure_ascii=False, indent=2)
-    _write_summary_md(add, remove, moved, pending, u_size, a.out, patch_info)
+    _write_summary_md(add, remove, moved, pending, u_size, a.out, patch_info,
+                      run_count)
 
-    print(f"[ANALYZE] U={u_size} add={len(add)} remove={len(remove)} "
-          f"move_passed={len(moved)} pending={len(pending)} "
-          f"history+={len(new_records)} patch={patch_info['patch_bytes']}B "
+    print(f"[ANALYZE] U={u_size} runs={run_count} add={len(add)} "
+          f"remove={len(remove)} move_passed={len(moved)} pending={len(pending)} "
+          f"records={len(records)} patch={patch_info['patch_bytes']}B "
           f"(applied add={patch_info['applied_adds']}, "
           f"remove={patch_info['applied_removes']})")
 

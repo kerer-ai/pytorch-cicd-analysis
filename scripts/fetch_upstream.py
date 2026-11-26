@@ -186,6 +186,52 @@ def fetch_artifact_member(repo: str, run_id: int, artifact: str, member: str,
     return path
 
 
+def recent_runs(repo: str, workflow: str, limit: int, branch: str = "") -> list:
+    """最近 limit 次 conclusion=success 的 run，返回 [{run_id, ts}]，按时间升序。"""
+    q = f"repos/{repo}/actions/workflows/{workflow}/runs?per_page=50&status=success"
+    if branch:
+        q += f"&branch={branch}"
+    jq = ("[.workflow_runs[] | select(.conclusion==\"success\")]"
+          f" | sort_by(.created_at) | reverse | .[:{limit}]"
+          " | .[] | \"\\(.databaseId)\\t\\(.created_at)\"")
+    out = _gh_json([q, "--jq", jq])
+    runs = []
+    for line in out.splitlines():
+        if "\t" not in line:
+            continue
+        rid, ts = line.split("\t", 1)
+        runs.append({"run_id": int(rid.strip()), "ts": ts.strip()})
+    if not runs:
+        raise SystemExit(f"no successful run found for {repo}/{workflow} "
+                         f"(branch={branch or '*'})")
+    runs.sort(key=lambda r: r["ts"])
+    print(f"recent runs of {workflow}: "
+          + ", ".join(f"{r['run_id']}@{r['ts']}" for r in runs))
+    return runs
+
+
+def fetch_recent(repo: str, workflow: str, artifact: str, out_dir: str,
+                 limit: int, member: str = "", branch: str = "",
+                 download_all: bool = False) -> None:
+    """下载最近 limit 次 run 的制品，每次落到 out_dir/<run_id>/ 并写 run.json。
+
+    run.json 记录 run_id 与 created_at，供解析层按真实时间排序构成状态序列。
+    """
+    for r in recent_runs(repo, workflow, limit, branch):
+        d = os.path.join(out_dir, str(r["run_id"]))
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as f:
+            json.dump(r, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        if member:
+            fetch_artifact_member(repo, r["run_id"], artifact, member, d)
+        elif download_all:
+            download_all_artifacts(repo, r["run_id"], artifact, d)
+        else:
+            download_artifact(repo, r["run_id"], artifact,
+                              os.path.join(d, artifact + ".zip"))
+
+
 def trigger_workflow(repo: str, workflow: str, ref: str) -> int:
     """触发 workflow_dispatch（裸触发，无 inputs），返回 run_id（不等待）。"""
     _gh_cli(["workflow", "run", workflow, "--repo", repo, "--ref", ref])
@@ -241,6 +287,10 @@ def main() -> None:
                    help="--download-all / --fetch-conf 时的输出目录")
     p.add_argument("--fetch-conf", action="store_true",
                    help="拉取上游黑名单 conf 原始 JSON 到 --out-dir（运行时数据源）")
+    p.add_argument("--recent", type=int, default=0,
+                   help="下载最近 N 次成功的 run，每次落 --out-dir/<run_id>/（含 run.json）")
+    p.add_argument("--branch", default="",
+                   help="--recent 时按分支过滤（如 main / ci-test）")
     p.add_argument("--conf-path",
                    default=os.environ.get("UPSTREAM_CONF_PATH", DEFAULT_CONF_PATH),
                    help="上游 conf 所在目录路径")
@@ -260,6 +310,11 @@ def main() -> None:
         conclusion = wait_completed(a.repo, a.wait)
         print(f"run_id={a.wait}")
         print(f"conclusion={conclusion}")
+        return
+
+    if a.recent:
+        fetch_recent(a.repo, a.workflow, a.artifact, a.out_dir, a.recent,
+                     a.artifact_member, a.branch, a.download_all)
         return
 
     run_id = a.run_id or find_run(a.repo, a.workflow)

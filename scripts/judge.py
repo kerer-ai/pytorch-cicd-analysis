@@ -2,7 +2,7 @@
 """判定器（方案 §6）：加入准入 / 删减准出判定。
 
 - judge_add(parsed, index, type_a_entries, records) -> (add, pending)
-  加入准入（§6.1）：failed 且 ∉U 且有 log 且精确匹配命中，且连续 failed ≥ N。
+  加入准入（§6.1）：failed 且 ∉U 且有 log 且命中已有日志分组，且连续 failed ≥ N。
 - judge_remove(index, records) -> (remove, moved)
   删减准出（§6.2）：双平台各自 consecutive_passed ≥ N 且无 failed 回退；
   双平台都成立 -> remove；仅单平台成立 -> move_passed。
@@ -41,28 +41,25 @@ def make_record(nodeid, file, category, issue, platform, status, run_id, ts, sou
     }
 
 
-def build_join_records(parsed_cases, index, run_id, ts, existing_records=None):
-    """加入方向的当前轮记录（含「断连」）。
+def build_join_records(parsed_cases, index):
+    """加入方向的观测记录（多轮窗口，含「断连」）。
 
-    - source=="full" 且非黑名单的 failed 节点 -> 记 failed（累计 consecutive_failed）。
-    - source=="full" 且非黑名单、本轮 passed、且历史曾 failed（活跃候选）的节点
-      -> 记 passed 作为「断连哨兵」，让 consecutive_failed 在通过后归零（§6.1 连续语义）。
-
-    只为「历史曾 failed」的节点记 passed 哨兵，避免给全量 passed 节点灌入海量历史。
+    - source=="full" 且非黑名单的 failed 节点 -> 记 failed。
+    - 同一节点在窗口内先 failed 后 passed -> 记 passed 作为「断连哨兵」，
+      让 consecutive_failed 在通过后归零（§6.1 连续语义）。
+    - 每条记录使用用例自带的 run_id/ts，按时间升序处理。
     """
-    prior_failed = set()
-    for r in existing_records or []:
-        if r.get("source") == "full" and bc.is_failed(r.get("status", "")):
-            prior_failed.add((r.get("nodeid", ""), r.get("platform", "")))
+    cases = [c for c in parsed_cases if c.get("source", "full") == "full"]
+    cases.sort(key=lambda c: (c.get("ts", ""), c.get("run_id", 0)))
 
+    prior_failed = set()
     new = []
     seen = set()
-    for c in parsed_cases:
-        if c.get("source", "full") != "full":
-            continue
+    for c in cases:
         nid = c["nodeid"]
         platform = c.get("platform", "")
-        key = (nid, platform)
+        run_id = c.get("run_id", 0)
+        key = (nid, platform, run_id)
         if key in seen:
             continue
         seen.add(key)
@@ -70,26 +67,31 @@ def build_join_records(parsed_cases, index, run_id, ts, existing_records=None):
             continue  # 已在黑名单，不参与 join
         status = c["status"]
         if bc.is_failed(status):
-            new.append(make_record(nid, "", "", "", platform, status, run_id, ts, "full"))
-        elif status == "passed" and key in prior_failed:
-            new.append(make_record(nid, "", "", "", platform, status, run_id, ts, "full"))
+            new.append(make_record(nid, "", "", "", platform, status, run_id,
+                                   c.get("ts", ""), "full"))
+            prior_failed.add((nid, platform))
+        elif status == "passed" and (nid, platform) in prior_failed:
+            new.append(make_record(nid, "", "", "", platform, status, run_id,
+                                   c.get("ts", ""), "full"))
     return new
 
 
-def build_patrol_records(parsed_cases, index, run_id, ts):
-    """删减方向的当前轮记录：source=="patrol" 的黑名单节点复测结果。
+def build_patrol_records(parsed_cases, index):
+    """删减方向的观测记录：source=="patrol" 的黑名单节点复测结果。
 
-    blacklist-test 复测的是「已在黑名单」的 nodeid，结果 passed/failed 均入历史，
-    供 judge_remove 统计 per-platform 连续 passed；不在黑名单的（可能已被删除）忽略。
+    blacklist-test 复测的是「已在黑名单」的 nodeid，passed/failed 均入序列，
+    供 judge_remove 统计 per-platform 连续 passed；不在黑名单的忽略。
     """
+    cases = [c for c in parsed_cases if c.get("source") == "patrol"]
+    cases.sort(key=lambda c: (c.get("ts", ""), c.get("run_id", 0)))
+
     new = []
     seen = set()
-    for c in parsed_cases:
-        if c.get("source") != "patrol":
-            continue
+    for c in cases:
         nid = c["nodeid"]
         platform = c.get("platform", "")
-        key = (nid, platform)
+        run_id = c.get("run_id", 0)
+        key = (nid, platform, run_id)
         if key in seen:
             continue
         seen.add(key)
@@ -97,7 +99,8 @@ def build_patrol_records(parsed_cases, index, run_id, ts):
         if meta is None:
             continue  # 不在黑名单，忽略（可能已被删除）
         new.append(make_record(nid, "", meta["category"], meta["issue"],
-                               platform, c["status"], run_id, ts, "patrol"))
+                               platform, c["status"], run_id, c.get("ts", ""),
+                               "patrol"))
     return new
 
 
@@ -141,6 +144,7 @@ def judge_add(parsed_cases, index, type_a_entries, records, thresholds=None):
             "nodeid": nid,
             "target_file": res.source_file,
             "log": log,
+            "group_log": res.group_log,   # 命中的 log 元素，补丁据此定位分组
             "category": res.category,
             "cann": "",
             "issue": bc.ISSUE_BY_CATEGORY.get(res.category, ""),
@@ -186,20 +190,13 @@ def main() -> None:
     p.add_argument("--parsed", required=True)
     p.add_argument("--config-dir", default="reports/upstream_conf",
                    help="运行时拉取的上游 conf 目录（fetch_upstream.py --fetch-conf）")
-    p.add_argument("--history-dir", default="status_history")
     a = p.parse_args()
 
     parsed = json.load(open(a.parsed, encoding="utf-8"))["cases"]
     index = bc.build_index(a.config_dir)
     type_a_entries = bc.load_type_a(a.config_dir)
-    records = []
-    if os.path.isdir(a.history_dir):
-        for name in sorted(os.listdir(a.history_dir)):
-            if name.endswith(".json"):
-                records.extend(json.load(open(os.path.join(a.history_dir, name),
-                                              encoding="utf-8")))
-    records += build_join_records(parsed, index, 0, "", records)
-    records += build_patrol_records(parsed, index, 0, "")
+    records = (build_join_records(parsed, index)
+               + build_patrol_records(parsed, index))
 
     add, pending = judge_add(parsed, index, type_a_entries, records)
     remove, moved = judge_remove(index, records)
