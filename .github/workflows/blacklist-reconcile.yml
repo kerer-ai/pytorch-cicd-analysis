@@ -121,6 +121,8 @@ jobs:
 
       # 5. 拉删减线最近 3 次 blacklist-report.json（含本次刚触发的 run）
       #    一行一个 U 内 nodeid，自带 a3_status / a5_status / 日志
+      #    上游该 job 是 continue-on-error + always()，部分 run 只产出 xlsx、没有 json；
+      #    这类 run 会被跳过并从更早的成功 run 补足 3 个
       - name: Download recent blacklist-report (删减线)
         env:
           GH_TOKEN: ${{ secrets.ASCEND_PAT }}

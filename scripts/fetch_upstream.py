@@ -25,6 +25,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -215,23 +216,43 @@ def recent_runs(repo: str, workflow: str, limit: int, branch: str = "") -> list:
 def fetch_recent(repo: str, workflow: str, artifact: str, out_dir: str,
                  limit: int, member: str = "", branch: str = "",
                  download_all: bool = False) -> None:
-    """下载最近 limit 次 run 的制品，每次落到 out_dir/<run_id>/ 并写 run.json。
+    """下载最近 limit 次「可用」run 的制品，每次落到 out_dir/<run_id>/ 并写 run.json。
 
     run.json 记录 run_id 与 created_at，供解析层按真实时间排序构成状态序列。
+    上游部分 job 是 continue-on-error + always()，会出现 run 成功但制品缺失或
+    只传了部分文件（如 blacklist-report 只有 xlsx）；这类 run 直接跳过，
+    从更早的成功 run 补足 limit 个，避免用残缺数据判定。
     """
-    for r in recent_runs(repo, workflow, limit, branch):
+    candidates = recent_runs(repo, workflow, max(limit * 6, 15), branch)
+    picked = []
+    for r in reversed(candidates):  # 从新到旧
+        if len(picked) >= limit:
+            break
         d = os.path.join(out_dir, str(r["run_id"]))
+        shutil.rmtree(d, ignore_errors=True)
         os.makedirs(d, exist_ok=True)
+        try:
+            if member:
+                fetch_artifact_member(repo, r["run_id"], artifact, member, d)
+            elif download_all:
+                download_all_artifacts(repo, r["run_id"], artifact, d)
+            else:
+                download_artifact(repo, r["run_id"], artifact,
+                                  os.path.join(d, artifact + ".zip"))
+        except SystemExit as exc:
+            shutil.rmtree(d, ignore_errors=True)
+            print(f"skip run {r['run_id']}: {exc}")
+            continue
         with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as f:
             json.dump(r, f, ensure_ascii=False, indent=2)
             f.write("\n")
-        if member:
-            fetch_artifact_member(repo, r["run_id"], artifact, member, d)
-        elif download_all:
-            download_all_artifacts(repo, r["run_id"], artifact, d)
-        else:
-            download_artifact(repo, r["run_id"], artifact,
-                              os.path.join(d, artifact + ".zip"))
+        picked.append(r)
+    if len(picked) < limit:
+        raise SystemExit(
+            f"only {len(picked)} usable run(s) of {workflow} with artifact "
+            f"'{artifact}'{'/' + member if member else ''} (need {limit})")
+    picked.sort(key=lambda x: x["ts"])
+    print("picked runs: " + ", ".join(f"{r['run_id']}@{r['ts']}" for r in picked))
 
 
 def trigger_workflow(repo: str, workflow: str, ref: str) -> int:
