@@ -34,7 +34,7 @@ def make_record(nodeid, file, category, issue, platform, status, run_id, ts, sou
         "issue": issue,
         "platform": platform,
         "status": status,
-        "source": source,  # "full"(加入线) / "patrol"(删减线)，供 status_series 隔离
+        "source": source,  # "full"(加入线) / "patrol"(删减线)，判定时按 source 分组隔离
         "run_id": run_id,
         "ts": ts,
         "consecutive_passed": 0,  # 判定时重算，不信任存量
@@ -107,21 +107,46 @@ def build_patrol_records(parsed_cases, index):
 # ---------------------------------------------------------------------------
 # 判定
 # ---------------------------------------------------------------------------
+def _series_map(records, source):
+    """按 (nodeid, platform) 分组并按时间升序，避免逐个 nodeid 全表扫描（O(N²)）。"""
+    d = {}
+    for r in records:
+        if r.get("source") != source:
+            continue
+        d.setdefault((r["nodeid"], r["platform"]), []).append(r)
+    for v in d.values():
+        v.sort(key=lambda r: (r.get("ts", ""), r.get("run_id", 0)))
+    return d
+
+
+def _statuses(recs):
+    return [r.get("status", "") for r in recs]
+
+
 def judge_add(parsed_cases, index, type_a_entries, records, thresholds=None):
     thresholds = thresholds or bc.THRESHOLDS
+    series = _series_map(records, "full")
+
+    # 每个 (nodeid, platform) 只取最近一次 failed 用例的日志做分类
+    latest = {}
+    for c in parsed_cases:
+        if c.get("source", "full") != "full":
+            continue
+        if not bc.is_failed(c.get("status", "")):
+            continue
+        nid = c["nodeid"]
+        if nid in index:                       # 已在黑名单 U
+            continue
+        key = (nid, c.get("platform", ""))
+        stamp = (c.get("ts", ""), c.get("run_id", 0))
+        if key not in latest or stamp >= latest[key][0]:
+            latest[key] = (stamp, c)
+
     add: list = []
     pending: list = []
     added_nids: set = set()
     pending_nids: set = set()
-    for c in parsed_cases:
-        if c.get("source", "full") != "full":
-            continue
-        if not bc.is_failed(c["status"]):
-            continue
-        nid = c["nodeid"]
-        platform = c.get("platform", "")
-        if nid in index:                       # 已在黑名单 U
-            continue
+    for (nid, platform), (_stamp, c) in latest.items():
         log = (c.get("log") or "").strip()
         if not log:                            # 无日志无法匹配
             continue
@@ -132,8 +157,7 @@ def judge_add(parsed_cases, index, type_a_entries, records, thresholds=None):
                 pending.append({"nodeid": nid, "log": log,
                                 "candidate_category": res.category})
             continue
-        cf, _ = bc.consecutive_tail(
-            bc.status_series(records, nid, platform, "full"), "failed")
+        cf, _ = bc.consecutive_tail(_statuses(series.get((nid, platform), [])), "failed")
         n = thresholds.get(res.category, 3)
         if cf < n:                             # 连续失败不足 N
             continue
@@ -155,9 +179,17 @@ def judge_add(parsed_cases, index, type_a_entries, records, thresholds=None):
 def judge_remove(index, records, thresholds=None,
                  enforce_issue_closed: bool = False) -> Tuple[list, list]:
     thresholds = thresholds or bc.THRESHOLDS
+    series = _series_map(records, "patrol")
+    by_nid: dict = {}
+    for (nid, platform), recs in series.items():
+        by_nid.setdefault(nid, {})[platform] = recs
+
     remove: list = []
     moved: list = []
-    for nid, meta in index.items():
+    for nid, plats in by_nid.items():
+        meta = index.get(nid)
+        if meta is None:
+            continue
         if meta["file"] == bc.FILE_PLATFORM:
             # passed_diff 语义的完整删减线待确认（§9.2 / RFC），暂不处理
             continue
@@ -165,8 +197,8 @@ def judge_remove(index, records, thresholds=None,
         n = thresholds.get(cat, 3)
         ok = {}
         for platform in PLATFORMS:
-            series = bc.status_series(records, nid, platform, "patrol")
-            cp, saw_failed = bc.consecutive_tail(series, "passed")
+            cp, saw_failed = bc.consecutive_tail(
+                _statuses(plats.get(platform, [])), "passed")
             ok[platform] = (cp >= n) and (not saw_failed)
         if cat in (bc.CATEGORY_DEVICE, bc.CATEGORY_CANN) and enforce_issue_closed:
             # §6.2：device/cann 类额外校验 issue 已关闭

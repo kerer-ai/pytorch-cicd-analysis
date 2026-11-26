@@ -27,7 +27,7 @@
 输出：out/parsed_cases.json =
   {run_id, runs:[...], cases:[{nodeid, status, log, file, platform, source, run_id, ts}]}
   - 按 (nodeid, platform, run_id) 首现保位去重（避免同平台 shard 内重复计数）。
-  - log 取自 message 字段（§3.1 的 log）。
+  - log 取自 message 字段（§3.1 的 log），仅 failed 时保留；patrol 线不需要日志。
 """
 from __future__ import annotations
 
@@ -62,10 +62,12 @@ def _parse_cases_json(data: bytes, platform: str, source: str, cases: list) -> N
         nodeid = (c.get("nodeid") or "").strip()
         if not nodeid:
             continue
+        status = c.get("status", "") or ""
         cases.append({
             "nodeid": nodeid,
-            "status": c.get("status", "") or "",
-            "log": c.get("message", "") or "",
+            "status": status,
+            # 只有 failed 需要日志做分类匹配；passed 的日志一律丢弃，控制内存/落盘体积
+            "log": (c.get("message", "") or "") if bc.is_failed(status) else "",
             "file": c.get("file", "") or "",
             "platform": platform,
             "source": source,
@@ -186,7 +188,9 @@ def parse_blacklist_report(path: str) -> list:
             cases.append({
                 "nodeid": nodeid,
                 "status": status,
-                "log": row.get(f"{plat}_log") or "",
+                # 删减判定只看 status；上游每行带 a3_log/a5_log 全量日志，
+                # 单次 run 解压后可达数百 MB，这里不保留，避免内存与体积爆炸
+                "log": "",
                 "file": "",
                 "platform": plat,
                 "source": "patrol",

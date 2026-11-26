@@ -169,21 +169,23 @@ def fetch_artifact_member(repo: str, run_id: int, artifact: str, member: str,
     if not aid:
         raise SystemExit(f"artifact '{artifact}*' not found for run {run_id}")
     data = _gh_bytes(f"repos/{repo}/actions/artifacts/{aid}/zip")
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, os.path.basename(member))
     with zipfile.ZipFile(io.BytesIO(data)) as z:
         hit = next((n for n in z.namelist()
                     if n == member or n.endswith("/" + member)), None)
         if hit is None:
             raise SystemExit(f"member '{member}' not found in artifact "
                              f"'{artifact}' (run {run_id}); files={z.namelist()[:20]}")
-        payload = z.read(hit)
-    if not payload:
+        # 逐块解压：blacklist-report.json 解压后可达数百 MB，避免整块读入内存
+        with z.open(hit) as src, open(path, "wb") as dst:
+            shutil.copyfileobj(src, dst, 1024 * 1024)
+    size = os.path.getsize(path)
+    if size == 0:
+        os.remove(path)
         raise SystemExit(f"empty member '{member}' in artifact '{artifact}'")
-    os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, os.path.basename(member))
-    with open(path, "wb") as f:
-        f.write(payload)
     print(f"extracted {member} (artifact_id={aid}, run_id={run_id}) -> {path} "
-          f"({len(payload)} bytes)")
+          f"({size} bytes)")
     return path
 
 

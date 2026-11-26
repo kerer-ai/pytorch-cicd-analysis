@@ -332,24 +332,9 @@ def classify_log(log: str, type_a_entries: List[Tuple[str, List[dict]]]) -> Clas
 
 
 # ---------------------------------------------------------------------------
-# 状态序列与连续计数（记录来自「最近 RECENT_RUNS 次上游 run」窗口，非本地历史）
+# 连续计数（记录来自「最近 RECENT_RUNS 次上游 run」窗口，非本地历史）
+# 序列分组由 judge._series_map 一次完成，此处只做尾部连续统计。
 # ---------------------------------------------------------------------------
-def status_series(records: List[dict], nodeid: str, platform: str,
-                  source: Optional[str] = None) -> List[str]:
-    """按时间升序返回 (nodeid, platform[, source]) 的 status 序列。
-
-    source 用于隔离加入线("full")与删减线("patrol")记录，避免互相污染连续判定；
-    传 None 表示不过滤（兼容无 source 字段的旧记录）。
-    """
-    sel = [
-        r for r in records
-        if r.get("nodeid") == nodeid and r.get("platform") == platform
-        and (source is None or r.get("source") == source)
-    ]
-    sel.sort(key=lambda r: (r.get("ts", ""), r.get("run_id", 0)))
-    return [r.get("status", "") for r in sel]
-
-
 def consecutive_tail(series: List[str], target: str, max_n: Optional[int] = None):
     """从序列末尾向前统计连续 == target 的次数，返回 (count, saw_failed)。
 
