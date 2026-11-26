@@ -257,6 +257,31 @@ def fetch_recent(repo: str, workflow: str, artifact: str, out_dir: str,
     print("picked runs: " + ", ".join(f"{r['run_id']}@{r['ts']}" for r in picked))
 
 
+def fetch_single(repo: str, run_id: int, artifact: str, out_dir: str,
+                 member: str = "", download_all: bool = False) -> None:
+    """下载「指定 run」的制品到 out_dir/<run_id>/ 并写 run.json。
+
+    与 fetch_recent 不同：这里不做跳过/补足，该 run 就是本轮唯一的判定数据源
+    （删减线的 blacklist-test 由本流水线触发），缺制品直接失败。
+    """
+    ts = _gh_json([f"repos/{repo}/actions/runs/{run_id}",
+                   "--jq", ".created_at"]).strip()
+    d = os.path.join(out_dir, str(run_id))
+    shutil.rmtree(d, ignore_errors=True)
+    os.makedirs(d, exist_ok=True)
+    if member:
+        fetch_artifact_member(repo, run_id, artifact, member, d)
+    elif download_all:
+        download_all_artifacts(repo, run_id, artifact, d)
+    else:
+        download_artifact(repo, run_id, artifact,
+                          os.path.join(d, artifact + ".zip"))
+    with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as f:
+        json.dump({"run_id": run_id, "ts": ts}, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    print(f"single run {run_id}@{ts} -> {d}")
+
+
 def trigger_workflow(repo: str, workflow: str, ref: str) -> int:
     """触发 workflow_dispatch（裸触发，无 inputs），返回 run_id（不等待）。"""
     _gh_cli(["workflow", "run", workflow, "--repo", repo, "--ref", ref])
@@ -314,6 +339,8 @@ def main() -> None:
                    help="拉取上游黑名单 conf 原始 JSON 到 --out-dir（运行时数据源）")
     p.add_argument("--recent", type=int, default=0,
                    help="下载最近 N 次成功的 run，每次落 --out-dir/<run_id>/（含 run.json）")
+    p.add_argument("--single-run", action="store_true",
+                   help="配合 --run-id：只取该 run，落 --out-dir/<run_id>/ 并写 run.json（缺失即失败）")
     p.add_argument("--branch", default="",
                    help="--recent 时按分支过滤（如 main / ci-test）")
     p.add_argument("--conf-path",
@@ -337,6 +364,12 @@ def main() -> None:
         print(f"conclusion={conclusion}")
         return
 
+    if a.single_run:
+        if not a.run_id:
+            raise SystemExit("--single-run 需要同时指定 --run-id")
+        fetch_single(a.repo, a.run_id, a.artifact, a.out_dir,
+                     a.artifact_member, a.download_all)
+        return
     if a.recent:
         fetch_recent(a.repo, a.workflow, a.artifact, a.out_dir, a.recent,
                      a.artifact_member, a.branch, a.download_all)

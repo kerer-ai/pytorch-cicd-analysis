@@ -4,9 +4,10 @@
 数据流：
   1. 运行时读取上游 conf（fetch_upstream.py --fetch-conf 拉取到 --upstream-conf-dir），
      构建 U / 索引 / 日志精确匹配库；本仓库不保存黑名单副本。
-  2. 读 parsed_cases.json（已含上游最近 N 次 run 的观测，带 run_id/ts），
-     装配 join + patrol 序列；不再依赖跨轮本地历史。
-  3. judge_add / judge_remove 判定（judge.py），阈值统一 N=RECENT_RUNS。
+  2. 读 parsed_cases.json：加入线含全量 nightly 最近 RECENT_RUNS 次 run 的观测，
+     删减线只含本次触发的 blacklist-test run（均带 run_id/ts），不依赖本地历史。
+  3. judge_add / judge_remove 判定（judge.py）：加入阈值 ADD_THRESHOLD=3，
+     删减以本次 run 为准（REMOVE_THRESHOLD=1）。
   4. 输出 out/candidates.json + out/audit_preview.json + out/summary.md（制品，人工消费）。
   5. 把 add/remove 应用到 conf 内存副本，生成 out/blacklist_update.patch
      （针对上游 ci-test 分支路径的 unified diff，空变更时为空文件）。
@@ -141,11 +142,14 @@ def build_blacklist_patch(add, remove, conf_dir, patch_out) -> dict:
 
 
 def _write_summary_md(add, remove, moved, pending, u_size, out_dir,
-                      patch_info=None, run_count=0):
+                      patch_info=None, join_runs=0, patrol_runs=0):
     lines = [
         "## 黑名单自动对账候选", "",
         f"- 黑名单全集 U（上游 conf 运行时构建）: {u_size}",
-        f"- 判定窗口（上游最近 N 次 run）: {run_count} 轮，阈值 N={bc.RECENT_RUNS}",
+        f"- 加入线窗口（上游最近 {bc.RECENT_RUNS} 次全量 run）: {join_runs} 轮，"
+        f"阈值连续 failed≥{bc.ADD_THRESHOLD}",
+        f"- 删减线（本次触发的 blacklist-test）: {patrol_runs} 轮，"
+        f"阈值本次通过（REMOVE_THRESHOLD={bc.REMOVE_THRESHOLD}）",
         f"- add: {len(add)}", f"- remove: {len(remove)}",
         f"- move_passed: {len(moved)}", f"- new_class_pending: {len(pending)}", "",
     ]
@@ -201,10 +205,13 @@ def main() -> None:
     index = bc.build_index(a.upstream_conf_dir)
     u_size = len(bc.collect_nodeids(a.upstream_conf_dir))
 
-    # 2. 判定窗口记录（最近 N 次上游 run 的观测，含断连哨兵）
+    # 2. 判定记录：加入线=最近 N 次全量 run；删减线=本次触发的巡检 run
     payload = json.load(open(a.parsed, encoding="utf-8"))
     parsed = payload["cases"]
-    run_count = len({c.get("run_id", 0) for c in parsed})
+    join_runs = len({c.get("run_id", 0) for c in parsed
+                     if c.get("source", "full") == "full"})
+    patrol_runs = len({c.get("run_id", 0) for c in parsed
+                       if c.get("source") == "patrol"})
     records = (judge.build_join_records(parsed, index)
                + judge.build_patrol_records(parsed, index))
 
@@ -222,7 +229,9 @@ def main() -> None:
     patch_info = build_blacklist_patch(add, remove, a.upstream_conf_dir, a.patch_out)
 
     audit_preview = {"run_id": a.run_id, "ts": ts, "u_size": u_size,
-                     "window_runs": run_count, "threshold": bc.RECENT_RUNS,
+                     "join_runs": join_runs, "patrol_runs": patrol_runs,
+                     "threshold": bc.ADD_THRESHOLD,
+                     "remove_threshold": bc.REMOVE_THRESHOLD,
                      "added": len(add), "removed": len(remove),
                      "moved_passed": len(moved), "new_class_pending": len(pending),
                      "window_records": len(records),
@@ -230,9 +239,10 @@ def main() -> None:
     with open(os.path.join(a.out, "audit_preview.json"), "w", encoding="utf-8") as f:
         json.dump(audit_preview, f, ensure_ascii=False, indent=2)
     _write_summary_md(add, remove, moved, pending, u_size, a.out, patch_info,
-                      run_count)
+                      join_runs, patrol_runs)
 
-    print(f"[ANALYZE] U={u_size} runs={run_count} add={len(add)} "
+    print(f"[ANALYZE] U={u_size} join_runs={join_runs} patrol_runs={patrol_runs} "
+          f"add={len(add)} "
           f"remove={len(remove)} move_passed={len(moved)} pending={len(pending)} "
           f"records={len(records)} patch={patch_info['patch_bytes']}B "
           f"(applied add={patch_info['applied_adds']}, "

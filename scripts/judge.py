@@ -2,12 +2,14 @@
 """判定器（方案 §6）：加入准入 / 删减准出判定。
 
 - judge_add(parsed, index, type_a_entries, records) -> (add, pending)
-  加入准入（§6.1）：failed 且 ∉U 且有 log 且命中已有日志分组，且连续 failed ≥ N。
+  加入准入（§6.1）：failed 且 ∉U 且有 log 且命中已有日志分组，
+  且在「上游最近 RECENT_RUNS 次全量 run」中连续 failed ≥ ADD_THRESHOLD。
 - judge_remove(index, records) -> (remove, moved)
-  删减准出（§6.2）：双平台各自 consecutive_passed ≥ N 且无 failed 回退；
-  双平台都成立 -> remove；仅单平台成立 -> move_passed。
+  删减准出（§6.2）：以「本次触发的 blacklist-test run」为准（REMOVE_THRESHOLD=1），
+  a3/a5 各自本次 passed 且无 failed 回退；双平台都成立 -> remove；
+  仅单平台成立 -> move_passed。
 
-N 按 category 分层（§1.4，见 blacklist_common.THRESHOLDS）。
+阈值见 blacklist_common.ADD_THRESHOLD / REMOVE_THRESHOLD。
 """
 from __future__ import annotations
 
@@ -178,7 +180,7 @@ def judge_add(parsed_cases, index, type_a_entries, records, thresholds=None):
 
 def judge_remove(index, records, thresholds=None,
                  enforce_issue_closed: bool = False) -> Tuple[list, list]:
-    thresholds = thresholds or bc.THRESHOLDS
+    thresholds = thresholds or bc.REMOVE_THRESHOLDS
     series = _series_map(records, "patrol")
     by_nid: dict = {}
     for (nid, platform), recs in series.items():

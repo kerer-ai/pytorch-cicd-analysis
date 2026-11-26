@@ -28,14 +28,24 @@ CATEGORY_DEVICE = "device not supported"    # DT_DOUBLE/DT_COMPLEX 硬件不支�
 CATEGORY_CANN = "cann not supported"        # contiguous / 维度等 CANN 限制
 CATEGORY_TEMP = "temporarily skipped"       # 临时跳过
 
-# 连续判定阈值 N：单次运行即拉取上游最近 RECENT_RUNS 次结果构成序列，
+# 加入线：单次运行即拉取上游最近 RECENT_RUNS 次全量 run 构成序列，
 # 因此所有类别统一为 RECENT_RUNS（3），否则 N=5 在 3 次窗口内永远无法满足。
 RECENT_RUNS = 3
+ADD_THRESHOLD = RECENT_RUNS
+# 删减线：blacklist-test 由本流水线每轮触发，以「本次 run」的结果为准，
+# 不做多轮累积，因此阈值恒为 1（本次 a3/a5 均 passed 即 remove）。
+REMOVE_THRESHOLD = 1
 THRESHOLDS = {
-    CATEGORY_DTYPE: RECENT_RUNS,
-    CATEGORY_DEVICE: RECENT_RUNS,
-    CATEGORY_CANN: RECENT_RUNS,
-    CATEGORY_TEMP: RECENT_RUNS,
+    CATEGORY_DTYPE: ADD_THRESHOLD,
+    CATEGORY_DEVICE: ADD_THRESHOLD,
+    CATEGORY_CANN: ADD_THRESHOLD,
+    CATEGORY_TEMP: ADD_THRESHOLD,
+}
+REMOVE_THRESHOLDS = {
+    CATEGORY_DTYPE: REMOVE_THRESHOLD,
+    CATEGORY_DEVICE: REMOVE_THRESHOLD,
+    CATEGORY_CANN: REMOVE_THRESHOLD,
+    CATEGORY_TEMP: REMOVE_THRESHOLD,
 }
 
 # issue 默认映射（对齐 conf/UNSUPPORTED.json 的 category_issues；§9.4 待确认）

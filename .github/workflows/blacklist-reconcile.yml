@@ -8,22 +8,25 @@ name: Blacklist Auto Reconcile
 #     `git apply -p1 <patch>` 即可应用。
 #   - 手动触发可勾选 auto_commit=true，把补丁提交到本仓库 blacklist_updates/
 #     （仅存档供审阅，不含黑名单本体；默认 false 只出制品）。
-#   - 判定窗口：每条线拉上游最近 3 次成功 run，单次运行内即构成连续序列，
-#     阈值统一 N=3；本仓库不再持久化任何跨轮状态。
+#   - 判定口径（两条线不同）：
+#       加入线：拉全量 nightly 最近 3 次成功 run，连续 failed ≥ 3 才建议加入；
+#       删减线：以本流水线「本次触发的 blacklist-test run」结果为准（单次判定），
+#               本次 a3/a5 均 passed 即建议删减。
+#     本仓库不持久化任何跨轮状态。
 #
 # 触发与数据源（§1.1）：
 #   - 只在默认分支生效；本仓库即「独立分析仓库」。
 #   - 拉数据：gh api 只读拉取 Ascend/pytorch，须用 secrets.ASCEND_PAT
 #     （仓库约束：访问 Ascend/pytorch 须用 PAT，不能用 github.token）。
 #
-# 数据源（三路，均取最近 3 次成功 run）：
-#   加入线（§2 / §6.1）：
+# 数据源（两路）：
+#   加入线（§2 / §6.1）：取最近 3 次成功 run
 #     - nightly-main-full-a3.yml 的 test-reports 制品 -> platform=a3
 #     - nightly-main-full-a5.yml 的 test-reports 制品 -> platform=a5
 #       （a3/a5 排除黑名单后的全量 nodeid 执行结果）
-#   删减线（§2 / §6.2）：
+#   删减线（§2 / §6.2）：只取本次触发的 run
 #     - blacklist-test.yml：本流水线先触发（ci-test 分支、无参）并等待完成，
-#       再取上游聚合好的 blacklist-report.json（一行一个 U 内 nodeid，
+#       再取「该 run」聚合好的 blacklist-report.json（一行一个 U 内 nodeid，
 #       自带 a3_status / a5_status 与日志，无需下载全部 shard 再猜平台）。
 
 on:
@@ -119,19 +122,19 @@ jobs:
             exit 1
           fi
 
-      # 5. 拉删减线最近 3 次 blacklist-report.json（含本次刚触发的 run）
+      # 5. 拉删减线：只取本次刚触发的那个 run（以本次结果为准，不做多轮累积）
       #    一行一个 U 内 nodeid，自带 a3_status / a5_status / 日志
-      #    上游该 job 是 continue-on-error + always()，部分 run 只产出 xlsx、没有 json；
-      #    这类 run 会被跳过并从更早的成功 run 补足 3 个
-      - name: Download recent blacklist-report (删减线)
+      #    该 run 若没产出 json（上游 job 是 continue-on-error），直接失败，避免用残缺数据
+      - name: Download triggered blacklist-report (删减线)
         env:
           GH_TOKEN: ${{ secrets.ASCEND_PAT }}
+          RUN_ID: ${{ steps.trigger.outputs.run_id }}
         run: |
           set -euo pipefail
           python3 scripts/fetch_upstream.py \
             --workflow blacklist-test.yml --artifact blacklist-report \
             --artifact-member blacklist-report.json \
-            --recent 3 --branch ci-test --out-dir reports/patrol
+            --single-run --run-id "$RUN_ID" --out-dir reports/patrol
 
       # 6. 解析三源 -> out/parsed_cases.json（逐 run 打 run_id/ts）
       - name: Parse & classify
