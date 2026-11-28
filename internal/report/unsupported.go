@@ -7,13 +7,13 @@ import (
 	"strings"
 )
 
-// unsupported.go 对齐 /tmp/20260909 conf/UNSUPPORTED.json：
+// unsupported.go 对齐 /tmp/20260909 conf/unsupported_log.json：
 // cann_categories（CANN 问题分类名单）、unsupported_patterns（不支持模式，AND 逻辑，
 // 大小写敏感——对齐 Python `kw in message`）、running_skiped（运行时跳过模式，
 // AND 逻辑，不区分大小写——对齐 Python _match_running_skiped）、
 // ops_match_category（增量 disabled 时算子名命中的兜底 category）。
 
-const unsupportedConfigName = "UNSUPPORTED.json"
+const unsupportedConfigName = "unsupported_log.json"
 
 type keywordPattern struct {
 	Category string   `json:"category"`

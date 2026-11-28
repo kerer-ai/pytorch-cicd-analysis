@@ -24,6 +24,11 @@ name: Blacklist Auto Reconcile
 #     - nightly-main-full-a3.yml 的 test-reports 制品 -> platform=a3
 #     - nightly-main-full-a5.yml 的 test-reports 制品 -> platform=a5
 #       （a3/a5 排除黑名单后的全量 nodeid 执行结果）
+#     - 分类以 conf/error_routing.json 为主判定（以目标文件分组）：
+#       hardware：double/complex、contiguous、8 维上限、api-ATen；
+#       dtype：ops(call aclnn* failed)、dtype 缺失、CANN 算子约束。
+#       上游已有日志分组仅用于同文件去重与异文件冲突校验；路由未命中交人工。
+#       名称清单为 conf/disabled_ops.json / conf/disabled_api_aten.json。
 #   删减线（§2 / §6.2）：只取本次触发的 run
 #     - blacklist-test.yml：本流水线先触发（ci-test 分支、无参）并等待完成，
 #       再取「该 run」聚合好的 blacklist-report.json（一行一个 U 内 nodeid，

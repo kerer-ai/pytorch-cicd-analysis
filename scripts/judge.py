@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 """判定器（方案 §6）：加入准入 / 删减准出判定。
 
-- judge_add(parsed, index, type_a_entries, records) -> (add, pending)
-  加入准入（§6.1）：failed 且 ∉U 且有 log 且命中已有日志分组，
-  且在「上游最近 RECENT_RUNS 次全量 run」中连续 failed ≥ ADD_THRESHOLD。
+- judge_add(parsed, index, type_a_entries, records) -> (add, pending, annotated)
+  加入准入（§6.1）：failed 且 ∉U 且有 log，且在「上游最近 RECENT_RUNS 次全量 run」
+  中连续 failed ≥ ADD_THRESHOLD。分类以 conf/error_routing.json 为主判定：
+  按目标文件分组的报错路由（hardware：double/complex、contiguous、8 维、api-ATen；
+  dtype：ops、dtype 缺失、CANN 约束）。上游已有分组仅用于同文件去重与异文件冲突校验；
+  路由未命中则交人工（pending，并提示上游文件）。
 - judge_remove(index, records) -> (remove, moved)
   删减准出（§6.2）：以「本次触发的 blacklist-test run」为准（REMOVE_THRESHOLD=1），
   a3/a5 各自本次 passed 且无 failed 回退；双平台都成立 -> remove；
@@ -125,7 +128,8 @@ def _statuses(recs):
     return [r.get("status", "") for r in recs]
 
 
-def judge_add(parsed_cases, index, type_a_entries, records, thresholds=None):
+def judge_add(parsed_cases, index, type_a_entries, records, thresholds=None,
+              ops=None, api_names=None):
     thresholds = thresholds or bc.THRESHOLDS
     series = _series_map(records, "full")
 
@@ -146,36 +150,70 @@ def judge_add(parsed_cases, index, type_a_entries, records, thresholds=None):
 
     add: list = []
     pending: list = []
+    annotated: list = []
     added_nids: set = set()
     pending_nids: set = set()
+    annotated_nids: set = set()
     for (nid, platform), (_stamp, c) in latest.items():
         log = (c.get("log") or "").strip()
         if not log:                            # 无日志无法匹配
             continue
-        res = bc.classify_log(log, type_a_entries)
-        if not res.hit:                        # 新 log，交人工确认
+        # 1. 可选 nodeid 路径规则（skip_rules，当前配置未启用）：命中仅标注、不加入
+        path_rule = bc.match_path_rule(nid)
+        if path_rule is not None:
+            if nid not in annotated_nids:
+                annotated_nids.add(nid)
+                annotated.append({"nodeid": nid, "category": path_rule.category,
+                                  "platform": platform})
+            continue
+        # 2. 主判定：按 error_routing.json（以目标文件分组）决定 category 与落盘文件
+        rule = bc.classify_by_rules(nid, log, ops, api_names)
+        if rule is None:
+            # 未命中路由规则：上游已有分组仅作提示，不自动加入，交人工确认
+            res = bc.classify_log(log, type_a_entries)
             if nid not in pending_nids:
                 pending_nids.add(nid)
-                pending.append({"nodeid": nid, "log": log,
-                                "candidate_category": res.category})
+                item = {"nodeid": nid, "log": log,
+                        "candidate_category": res.category}
+                if res.hit:
+                    item["upstream_file"] = res.source_file
+                pending.append(item)
             continue
-        cf, _ = bc.consecutive_tail(_statuses(series.get((nid, platform), [])), "failed")
-        n = thresholds.get(res.category, 3)
-        if cf < n:                             # 连续失败不足 N
+        cf, _ = bc.consecutive_tail(
+            _statuses(series.get((nid, platform), [])), "failed")
+        if cf < thresholds.get(rule.category, bc.ADD_THRESHOLD):
             continue
-        if nid in added_nids:                  # 黑名单以 nodeid 为键，每 nodeid 只出一次
+        if nid in added_nids:
             continue
         added_nids.add(nid)
+        # 上游已有分组仅用于去重/校验：同文件命中则并入既有分组，异文件记为冲突
+        res = bc.classify_log(log, type_a_entries)
+        new_group = True
+        group_log = rule.group_log
+        category = rule.category
+        matched_by = rule.rule_name or "rule"
+        extra = {}
+        if res.hit and res.source_file == rule.target_file:
+            new_group = False
+            group_log = res.group_log
+            category = res.category
+            matched_by = "log"
+        elif res.hit:
+            extra["upstream_file"] = res.source_file
+            extra["routing_conflict"] = True
         add.append({
             "nodeid": nid,
-            "target_file": res.source_file,
+            "target_file": rule.target_file,
             "log": log,
-            "group_log": res.group_log,   # 命中的 log 元素，补丁据此定位分组
-            "category": res.category,
+            "group_log": group_log,
+            "category": category,
             "cann": "",
-            "issue": bc.ISSUE_BY_CATEGORY.get(res.category, ""),
+            "issue": bc.ISSUE_BY_CATEGORY.get(category, ""),
+            "new_group": new_group,
+            "matched_by": matched_by,
+            **extra,
         })
-    return add, pending
+    return add, pending, annotated
 
 
 def judge_remove(index, records, thresholds=None,
@@ -232,10 +270,10 @@ def main() -> None:
     records = (build_join_records(parsed, index)
                + build_patrol_records(parsed, index))
 
-    add, pending = judge_add(parsed, index, type_a_entries, records)
+    add, pending, annotated = judge_add(parsed, index, type_a_entries, records)
     remove, moved = judge_remove(index, records)
-    print(json.dumps({"add": add, "remove": remove, "move_passed": moved,
-                      "new_class_pending": pending},
+    print(json.dumps({"add": add, "annotated": annotated, "remove": remove,
+                      "move_passed": moved, "new_class_pending": pending},
                      ensure_ascii=False, indent=2))
 
 

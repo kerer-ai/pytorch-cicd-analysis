@@ -7,7 +7,10 @@
   2. 读 parsed_cases.json：加入线含全量 nightly 最近 RECENT_RUNS 次 run 的观测，
      删减线只含本次触发的 blacklist-test run（均带 run_id/ts），不依赖本地历史。
   3. judge_add / judge_remove 判定（judge.py）：加入阈值 ADD_THRESHOLD=3，
-     删减以本次 run 为准（REMOVE_THRESHOLD=1）。
+     删减以本次 run 为准（REMOVE_THRESHOLD=1）。加入线以 conf/error_routing.json
+     为主判定（按目标文件分组）：先 nodeid 路径规则（仅标注），再按 hardware /
+     dtype 的日志规则决定 category 与落盘文件；上游已有分组仅用于同文件去重与
+     异文件冲突校验，路由未命中交人工。
   4. 输出 out/candidates.json + out/audit_preview.json + out/summary.md（制品，人工消费）。
   5. 把 add/remove 应用到 conf 内存副本，生成 out/blacklist_update.patch
      （针对上游 ci-test 分支路径的 unified diff，空变更时为空文件）。
@@ -41,30 +44,37 @@ def _serialize_conf(filename: str, data) -> str:
 
 
 def _apply_adds(data, filename: str, adds: list):
-    """把 add 候选并入 conf 数据；返回 (已应用数, 无法定位 log 分组的 nodeid 列表)。
+    """把 add 候选并入 conf 数据；返回 (已应用数, 无法定位 log 分组的 nodeid 列表, 新建分组数)。
 
     conf 的 log 是数组，按其中每个元素建立「元素 -> 分组」映射；
     候选自带 group_log（判定阶段命中的那个元素），据此定位插入分组。
+    api-ATen / ops 命中的候选带 new_group=True，找不到分组时在文件末尾新建一条。
     """
     if filename not in bc.TYPE_A_FILES:
         # 非类型 A 无 log 分组，无法自动定位插入点，交人工
-        return 0, [a["nodeid"] for a in adds]
+        return 0, [a["nodeid"] for a in adds], 0
     by_log = {}
     for ent in data:
         for item in bc.normalize_logs(ent.get("log")):
             by_log.setdefault(item.strip(), ent)
-    applied, skipped = 0, []
+    applied, skipped, created = 0, [], 0
     for a in adds:
-        ent = by_log.get((a.get("group_log") or "").strip())
+        glog = (a.get("group_log") or "").strip()
+        ent = by_log.get(glog)
         if ent is None:
-            skipped.append(a["nodeid"])
-            continue
+            if not (a.get("new_group") and glog):
+                skipped.append(a["nodeid"])
+                continue
+            ent = {"log": [glog], "category": a.get("category", ""), "nodeids": {}}
+            data.append(ent)
+            by_log[glog] = ent
+            created += 1
         nodeids = ent.setdefault("nodeids", {})
         if a["nodeid"] in nodeids:
             continue
         nodeids[a["nodeid"]] = {"cann": a.get("cann", ""), "issue": a.get("issue", "")}
         applied += 1
-    return applied, skipped
+    return applied, skipped, created
 
 
 def _apply_removes(data, filename: str, removes: list) -> int:
@@ -104,10 +114,12 @@ def build_blacklist_patch(add, remove, conf_dir, patch_out) -> dict:
         removes_by.setdefault(r["source_file"], []).append(r)
 
     diffs, applied_adds, applied_removes, skipped = [], 0, 0, []
+    new_groups = 0
     skipped_removes = []
     for filename in sorted(set(adds_by) | set(removes_by)):
-        if filename in bc.INDEX_ONLY_FILES:
-            # a3a5 的分组是 a3/a5 日志组合，补丁改写易改错分组，交人工
+        if filename in bc.INDEX_ONLY_FILES or filename == bc.FILE_RUNNING_SKIPED:
+            # a3a5 的分组是 a3/a5 日志组合；running_skiped 是 nodeid -> reason 字典，
+            # 两者补丁改写易改错结构，交人工
             skipped_removes.extend(r["nodeid"] for r in removes_by.get(filename, []))
             continue
         path = os.path.join(conf_dir, filename)
@@ -115,8 +127,9 @@ def build_blacklist_patch(add, remove, conf_dir, patch_out) -> dict:
             raw = f.read()
         data = json.loads(raw)
         if filename in adds_by:
-            n, sk = _apply_adds(data, filename, adds_by[filename])
+            n, sk, created = _apply_adds(data, filename, adds_by[filename])
             applied_adds += n
+            new_groups += created
             skipped.extend(sk)
         if filename in removes_by:
             applied_removes += _apply_removes(data, filename, removes_by[filename])
@@ -137,11 +150,12 @@ def build_blacklist_patch(add, remove, conf_dir, patch_out) -> dict:
     with open(patch_out, "w", encoding="utf-8", newline="") as f:
         f.write(text)
     return {"patch": patch_out, "applied_adds": applied_adds,
-            "applied_removes": applied_removes, "skipped_adds": skipped,
+            "applied_removes": applied_removes, "new_groups": new_groups,
+            "skipped_adds": skipped,
             "skipped_removes": skipped_removes, "patch_bytes": len(text)}
 
 
-def _write_summary_md(add, remove, moved, pending, u_size, out_dir,
+def _write_summary_md(add, remove, moved, pending, annotated, u_size, out_dir,
                       patch_info=None, join_runs=0, patrol_runs=0):
     lines = [
         "## 黑名单自动对账候选", "",
@@ -151,12 +165,14 @@ def _write_summary_md(add, remove, moved, pending, u_size, out_dir,
         f"- 删减线（本次触发的 blacklist-test）: {patrol_runs} 轮，"
         f"阈值本次通过（REMOVE_THRESHOLD={bc.REMOVE_THRESHOLD}）",
         f"- add: {len(add)}", f"- remove: {len(remove)}",
-        f"- move_passed: {len(moved)}", f"- new_class_pending: {len(pending)}", "",
+        f"- move_passed: {len(moved)}", f"- new_class_pending: {len(pending)}",
+        f"- 仅标注不加入（CUDA专属 / 滞后解耦文件）: {len(annotated)}", "",
     ]
     if patch_info is not None:
         lines += [
             f"- 补丁: `{patch_info['patch']}` ({patch_info['patch_bytes']} bytes, "
-            f"已应用 add={patch_info['applied_adds']}, remove={patch_info['applied_removes']})",
+            f"已应用 add={patch_info['applied_adds']}, remove={patch_info['applied_removes']}, "
+            f"新建分组={patch_info.get('new_groups', 0)})",
         ]
         if patch_info["skipped_adds"]:
             lines.append(f"- 未能定位 log 分组、需人工处理: {len(patch_info['skipped_adds'])}")
@@ -169,7 +185,18 @@ def _write_summary_md(add, remove, moved, pending, u_size, out_dir,
     if add:
         lines.append("### 建议加入")
         for i in add:
-            lines.append(f"- `{i['nodeid']}` -> {i['category']} (`{i['target_file']}`)")
+            how = "新建分组" if i.get("new_group") else "已有分组"
+            conflict = ""
+            if i.get("routing_conflict"):
+                conflict = f"，上游原归入 `{i.get('upstream_file')}`（冲突待确认）"
+            lines.append(f"- `{i['nodeid']}` -> {i['category']} "
+                         f"(`{i['target_file']}`, {how}, "
+                         f"匹配={i.get('matched_by', 'log')}{conflict})")
+        lines.append("")
+    if annotated:
+        lines.append("### 仅标注不加入")
+        for i in annotated:
+            lines.append(f"- `{i['nodeid']}` -> {i['category']}")
         lines.append("")
     if remove:
         lines.append("### 建议删减")
@@ -216,12 +243,12 @@ def main() -> None:
                + judge.build_patrol_records(parsed, index))
 
     # 3. 判定
-    add, pending = judge.judge_add(parsed, index, type_a_entries, records)
+    add, pending, annotated = judge.judge_add(parsed, index, type_a_entries, records)
     remove, moved = judge.judge_remove(index, records)
 
     # 4. 候选制品（人工消费；本仓库不落盘黑名单）
-    candidates = {"add": add, "remove": remove, "move_passed": moved,
-                  "new_class_pending": pending}
+    candidates = {"add": add, "annotated": annotated, "remove": remove,
+                  "move_passed": moved, "new_class_pending": pending}
     with open(os.path.join(a.out, "candidates.json"), "w", encoding="utf-8") as f:
         json.dump(candidates, f, ensure_ascii=False, indent=2)
 
@@ -234,18 +261,21 @@ def main() -> None:
                      "remove_threshold": bc.REMOVE_THRESHOLD,
                      "added": len(add), "removed": len(remove),
                      "moved_passed": len(moved), "new_class_pending": len(pending),
+                     "annotated": len(annotated),
                      "window_records": len(records),
                      "patch": patch_info}
     with open(os.path.join(a.out, "audit_preview.json"), "w", encoding="utf-8") as f:
         json.dump(audit_preview, f, ensure_ascii=False, indent=2)
-    _write_summary_md(add, remove, moved, pending, u_size, a.out, patch_info,
+    _write_summary_md(add, remove, moved, pending, annotated, u_size, a.out, patch_info,
                       join_runs, patrol_runs)
 
     print(f"[ANALYZE] U={u_size} join_runs={join_runs} patrol_runs={patrol_runs} "
           f"add={len(add)} "
           f"remove={len(remove)} move_passed={len(moved)} pending={len(pending)} "
+          f"annotated={len(annotated)} "
           f"records={len(records)} patch={patch_info['patch_bytes']}B "
           f"(applied add={patch_info['applied_adds']}, "
+          f"new_groups={patch_info.get('new_groups', 0)}, "
           f"remove={patch_info['applied_removes']})")
 
 

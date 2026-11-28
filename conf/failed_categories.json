@@ -7,7 +7,7 @@
   "# evidence": "所有规则类型自动提取原生日志上下文片段，无需配置evidence字段",
   "# exclude_keywords": "排除关键字列表, 含任一排除关键字时跳过该分类",
   "# 大小写": "所有关键字/正则匹配均不区分大小写，配置中保留原始大小写以增强可读性",
-  "# CANN问题": "由 conf/UNSUPPORTED.json 单独定义，分类名命中名单则标记为CANN问题",
+  "# CANN问题": "由 conf/unsupported_log.json 单独定义，分类名命中名单则标记为CANN问题",
   "# root_cause": "分类的根因/处理建议，命中该分类（含子分类）后写入 failed_testcases.xlsx 的「备注」列",
 
   "categories": [

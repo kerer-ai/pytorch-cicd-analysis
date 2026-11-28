@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Tuple
 
@@ -48,7 +49,7 @@ REMOVE_THRESHOLDS = {
     CATEGORY_TEMP: REMOVE_THRESHOLD,
 }
 
-# issue 默认映射（对齐 conf/UNSUPPORTED.json 的 category_issues；§9.4 待确认）
+# issue 默认映射（对齐 conf/unsupported_log.json 的 category_issues；§9.4 待确认）
 ISSUE_BY_CATEGORY = {
     CATEGORY_DEVICE: "https://gitcode.com/Ascend/pytorch/issues/5314",
     CATEGORY_CANN: "https://gitcode.com/Ascend/pytorch/issues/5315",
@@ -62,18 +63,21 @@ FILE_HARDWARE = "hardware_unsupported_testcases.json"  # 类型 A
 FILE_A3A5 = "a3a5_log_diff_testcases.json"            # 类型 A 变体（log 为字符串数组）
 FILE_TEMP = "temporary_skiped_grouped.json"           # 类型 B
 FILE_PLATFORM = "platform_passed_diff.json"           # 类型 C
+FILE_RUNNING_SKIPED = "running_skiped_testcases.json"  # 类型 D（nodeid -> {reason}）
 
 # 参与日志匹配与补丁改写的类型 A 文件。
 TYPE_A_FILES = (FILE_DTYPE, FILE_HARDWARE)
 # a3a5_log_diff 每个分组是「a3 与 a5 观测日志不一致」的组合，新增时无法可靠
 # 定位分组，因此只参与「U + 索引」（可被 remove 命中，但补丁不自动改写）。
+# running_skiped 为 nodeid -> {reason} 的字典，同样只参与 U + 索引，改写交人工。
 INDEX_ONLY_FILES = (FILE_A3A5,)
-ALL_FILES = (FILE_DTYPE, FILE_HARDWARE, FILE_A3A5, FILE_TEMP, FILE_PLATFORM)
+ALL_FILES = (FILE_DTYPE, FILE_HARDWARE, FILE_A3A5, FILE_TEMP, FILE_PLATFORM,
+             FILE_RUNNING_SKIPED)
 
 # ---------------------------------------------------------------------------
 # §5 日志匹配词表（顺序子串匹配，命中即返回；行内任一关键词命中即返回该行 category）
 # 仅在日志分组匹配未命中时用作「新类」候选分类（hit=False，不自动建组）。
-# 大小写不敏感（对齐仓库 UNSUPPORTED.json 的匹配惯例）。
+# 大小写不敏感（对齐仓库 unsupported_log.json 的匹配惯例）。
 # ---------------------------------------------------------------------------
 WORD_TABLE: List[Tuple[Tuple[str, ...], str]] = [
     (("DT_DOUBLE", "DT_COMPLEX", "float64", "Complex"), CATEGORY_DEVICE),
@@ -86,6 +90,32 @@ WORD_TABLE: List[Tuple[Tuple[str, ...], str]] = [
 
 # 失败状态归一化（制品里 Go 侧同时统计 failed / errors 两种）
 FAILED_STATUSES = ("failed", "errors", "error")
+
+# ---------------------------------------------------------------------------
+# 本仓库自带配置（非上游 conf）：ops / api-ATen 清单、报错路由规则
+# ---------------------------------------------------------------------------
+REPO_CONF_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "conf")
+FILE_OPS = "disabled_ops.json"
+FILE_API_ATEN = "disabled_api_aten.json"
+FILE_ROUTING = "error_routing.json"
+
+_ROUTING_CACHE: dict = {}
+
+
+def load_routing(conf_dir: Optional[str] = None) -> dict:
+    """读取 error_routing.json（按目标文件分组的报错路由）。
+
+    结构：
+      skip_rules: 可选；nodeid 路径规则（当前配置未启用，命中仅标注）
+      files: 以目标 conf 文件名称为 key，key 顺序即匹配优先级；
+             value = {category 默认分类, rules: [{type/keywords/regex/source/group_log}]}
+      rule.type: keywords / regex / api_aten / ops
+    """
+    path = os.path.join(conf_dir or REPO_CONF_DIR, FILE_ROUTING)
+    if path not in _ROUTING_CACHE:
+        _ROUTING_CACHE[path] = load_json(path)
+    return _ROUTING_CACHE[path]
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +234,7 @@ def load_extra_entries(config_dir: str) -> List[Tuple[str, List[dict]]]:
 
 
 def collect_nodeids(config_dir: str) -> set:
-    """生成全集 U：类型 A（含 a3a5 变体）nodeids + 类型 B nodes + 类型 C passed_a3/a5。"""
+    """生成全集 U：类型 A（含 a3a5 变体）nodeids + 类型 B nodes + 类型 C passed_a3/a5 + running_skiped。"""
     nodeids: set = set()
     cfg_dir = config_dir
     for filename in ALL_FILES:
@@ -221,13 +251,16 @@ def collect_nodeids(config_dir: str) -> set:
         elif filename == FILE_PLATFORM:
             nodeids.update(data.get("passed_a3", []))
             nodeids.update(data.get("passed_a5", []))
+        elif filename == FILE_RUNNING_SKIPED:
+            nodeids.update(data.keys())
     return nodeids
 
 
 def build_index_from_data(type_a_entries: List[Tuple[str, List[dict]]],
                           temp_data: Optional[dict] = None,
                           platform_data: Optional[dict] = None,
-                          extra_entries: Optional[List[Tuple[str, List[dict]]]] = None) -> dict:
+                          extra_entries: Optional[List[Tuple[str, List[dict]]]] = None,
+                          running_skip_data: Optional[dict] = None) -> dict:
     """从已加载的 conf 数据构建 nodeid -> {"file", "category", "issue"} 索引。
 
     数据来自运行时拉取的上游 conf（fetch_upstream.py --fetch-conf），
@@ -266,6 +299,11 @@ def build_index_from_data(type_a_entries: List[Tuple[str, List[dict]]],
             index.setdefault(nid, {"file": FILE_PLATFORM, "category": "", "issue": ""})
         for nid in platform_data.get("passed_a5", []):
             index.setdefault(nid, {"file": FILE_PLATFORM, "category": "", "issue": ""})
+    if running_skip_data:
+        for nid, meta in running_skip_data.items():
+            reason = meta.get("reason", "") if isinstance(meta, dict) else ""
+            index.setdefault(nid, {"file": FILE_RUNNING_SKIPED,
+                                   "category": "", "issue": reason})
     return index
 
 
@@ -280,7 +318,138 @@ def build_index(config_dir: str) -> dict:
         _load_json_if_exists(os.path.join(config_dir, FILE_TEMP)),
         _load_json_if_exists(os.path.join(config_dir, FILE_PLATFORM)),
         load_extra_entries(config_dir),
+        _load_json_if_exists(os.path.join(config_dir, FILE_RUNNING_SKIPED)),
     )
+
+
+# ---------------------------------------------------------------------------
+# 命中规则（ops / api-ATen / nodeid 路径），与 Go reportgen 的判定顺序一致
+# ---------------------------------------------------------------------------
+@dataclass
+class RuleResult:
+    category: str                       # 来自 error_routing.json 的 category
+    target_file: Optional[str] = None   # 新建分组要写入的 conf 文件（仅 addable 时有效）
+    group_log: Optional[str] = None     # 新分组的 log 元素
+    addable: bool = False               # True=可自动新建分组；False=仅标注
+    rule_name: str = ""                 # 命中的规则名（error_routing.json 的 name）
+
+
+def load_ops(conf_dir: Optional[str] = None, source: Optional[str] = None) -> List[str]:
+    """读取 disabled_ops.json（字符串数组）。"""
+    data = load_json(os.path.join(conf_dir or REPO_CONF_DIR, source or FILE_OPS))
+    return [str(x).strip() for x in data if str(x).strip()]
+
+
+def load_api_aten_names(conf_dir: Optional[str] = None,
+                        source: Optional[str] = None) -> List[str]:
+    """读取 disabled_api_aten.json，展开为匹配名列表（aten 加 aten:: 前缀）。"""
+    data = load_json(os.path.join(conf_dir or REPO_CONF_DIR, source or FILE_API_ATEN))
+    names = [str(x).strip() for x in data.get("api", []) if str(x).strip()]
+    names += ["aten::" + str(x).strip() for x in data.get("aten", []) if str(x).strip()]
+    return names
+
+
+def _is_ident_char(ch: str) -> bool:
+    return ch == "_" or ("0" <= ch <= "9") or ("a" <= ch <= "z") or ("A" <= ch <= "Z")
+
+
+def word_boundary_contains(s: str, name: str) -> bool:
+    """name 是否以独立标识符形式出现在 s 中（前后均不是字母/数字/下划线）。"""
+    if not name:
+        return False
+    start = 0
+    while True:
+        idx = s.find(name, start)
+        if idx < 0:
+            return False
+        left_ok = idx == 0 or not _is_ident_char(s[idx - 1])
+        end = idx + len(name)
+        right_ok = end == len(s) or not _is_ident_char(s[end])
+        if left_ok and right_ok:
+            return True
+        start = idx + 1
+
+
+def match_api_aten(message: str, names: List[str]) -> str:
+    """返回命中的 API/ATen 名（词边界完全匹配，取最长）。"""
+    best = ""
+    for name in names:
+        if len(name) > len(best) and word_boundary_contains(message, name):
+            best = name
+    return best
+
+
+def match_ops(message: str, ops: List[str]) -> str:
+    """返回真实调用失败的算子名：仅认 `call <op> failed` 形式，取最长。"""
+    best = ""
+    for op in ops:
+        if len(op) > len(best) and ("call " + op + " failed") in message:
+            best = op
+    return best
+
+
+def match_path_rule(nodeid: str) -> Optional[RuleResult]:
+    """仅匹配 skip_rules 的 nodeid 路径规则；命中返回 addable=False（仅标注）。"""
+    for rule in load_routing().get("skip_rules", []):
+        if rule.get("type") != "nodeid_path":
+            continue
+        for fragment in rule.get("fragments", []):
+            if fragment in nodeid:
+                return RuleResult(rule.get("category", ""), None, None, False,
+                                  rule.get("name", ""))
+    return None
+
+
+def classify_by_rules(nodeid: str, message: str, ops: Optional[List[str]] = None,
+                      api_names: Optional[List[str]] = None) -> Optional[RuleResult]:
+    """按 error_routing.json 的 files 顺序做主判定：命中即返回目标文件与 category。
+
+    files 的 key 顺序即优先级；同一文件内按 rules 顺序匹配。未命中返回 None。
+    addable=false 的文件（a3a5/temporary/running_skiped/platform）只登记用途，
+    不参与新分组路由，直接跳过。
+    新分组用 rule.group_log（{match} 替换为命中内容）作为 log 元素。
+    """
+    message = message or ""
+    for filename, target in load_routing().get("files", {}).items():
+        if target.get("addable", True) is False:
+            continue
+        default_category = target.get("category", "")
+        for rule in target.get("rules", []):
+            matched = _match_rule(rule, message, ops, api_names)
+            if matched:
+                return _rule_hit(rule, matched, filename, default_category)
+    return None
+
+
+def _match_rule(rule: dict, message: str, ops: Optional[List[str]],
+                api_names: Optional[List[str]]) -> Optional[str]:
+    """按 rule.type 匹配日志，返回命中内容（供 group_log 的 {match} 使用）。"""
+    typ = rule.get("type")
+    if typ == "keywords":
+        for kw in rule.get("keywords", []):
+            if kw in message:
+                return kw
+    elif typ == "regex":
+        for pattern in rule.get("regex", []):
+            mo = re.search(pattern, message)
+            if mo:
+                return mo.group(0)
+    elif typ == "api_aten":
+        names = api_names if api_names is not None else load_api_aten_names(
+            source=rule.get("source"))
+        return match_api_aten(message, names)
+    elif typ == "ops":
+        op_list = ops if ops is not None else load_ops(source=rule.get("source"))
+        return match_ops(message, op_list)
+    return None
+
+
+def _rule_hit(rule: dict, matched: str, filename: str,
+              default_category: str) -> RuleResult:
+    """把规则命中项转成 RuleResult；category 取规则覆盖值，否则用文件默认值。"""
+    group_log = (rule.get("group_log") or "{match}").replace("{match}", matched)
+    return RuleResult(rule.get("category") or default_category, filename,
+                      group_log, True, rule.get("name", ""))
 
 
 # ---------------------------------------------------------------------------

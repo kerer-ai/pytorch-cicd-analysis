@@ -10,17 +10,17 @@ import (
 func testFS(t *testing.T) fs.FS {
 	t.Helper()
 	confDir := filepath.Join("..", "..", "conf")
-	if _, err := os.Stat(filepath.Join(confDir, "UNSUPPORTED.json")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(confDir, "unsupported_log.json")); os.IsNotExist(err) {
 		confDir = t.TempDir()
-		unsup, _ := os.ReadFile(filepath.Join("..", "..", "conf", "UNSUPPORTED.json"))
-		os.WriteFile(filepath.Join(confDir, "UNSUPPORTED.json"), unsup, 0644)
+		unsup, _ := os.ReadFile(filepath.Join("..", "..", "conf", "unsupported_log.json"))
+		os.WriteFile(filepath.Join(confDir, "unsupported_log.json"), unsup, 0644)
 	}
 	return os.DirFS(confDir)
 }
 
 func testUnsupportedCfg(t *testing.T) *UnsupportedConfig {
 	t.Helper()
-	cfg, err := LoadUnsupportedConfig(testFS(t), "UNSUPPORTED.json")
+	cfg, err := LoadUnsupportedConfig(testFS(t), "unsupported_log.json")
 	if err != nil {
 		t.Fatalf("LoadUnsupportedConfig: %v", err)
 	}

@@ -8,7 +8,7 @@ import (
 // checkOpsInMessage 返回 message 中真实调用失败的算子名。
 // 仅当日志包含 "call <op> failed" 形式（如 "call aclnnAdd failed"）才视为真实
 // 调用该算子，避免仅因日志提及算子名而误命中；并取最长匹配，避免短算子名
-// （如 aclnnAdd）抢先匹配到长算子名（如 aclnnAddmm）的前缀，无需依赖 ops.txt 排序。
+// （如 aclnnAdd）抢先匹配到长算子名（如 aclnnAddmm）的前缀，无需依赖 disabled_ops.json 排序。
 func checkOpsInMessage(message string, ops []string) string {
 	if message == "" || len(ops) == 0 {
 		return ""
@@ -23,7 +23,7 @@ func checkOpsInMessage(message string, ops []string) string {
 }
 
 // checkAPIATenInMessage 返回 message 中命中的 API/ATen 未支持名。
-// 与 ops.txt 的算子匹配（call <op> failed）不同，这里要求"完全匹配"：
+// 与 disabled_ops.json 的算子匹配（call <op> failed）不同，这里要求"完全匹配"：
 // 命中名必须作为独立标识符出现（前后均不是字母/数字/下划线），
 // 否则 hypot 会误命中 hypotddd；并取最长匹配以保证稳定。
 func checkAPIATenInMessage(message string, names []string) string {
@@ -83,7 +83,7 @@ func extractFirstLine(message string) string {
 
 // classifyCase 返回 (isUnsupported, reason)，对齐 Python fill_cdef H/I 列：
 // 仅 failed/error 判定；仅 unsupported 模式命中（大小写敏感）标记为不支持。
-// 算子命中（ops.txt）不再标记为不支持——改为在 failed_testcases 单独输出「算子失败用例」。
+// 算子命中（disabled_ops.json）不再标记为不支持——改为在 failed_testcases 单独输出「算子失败用例」。
 func classifyCase(status, message string, _ []string, unsupported *UnsupportedConfig) (string, string) {
 	if status != "failed" && status != "error" {
 		return "", ""

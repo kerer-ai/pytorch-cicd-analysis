@@ -36,7 +36,7 @@ func testSummaryTemplate() string {
 
 func writeTestConf(t *testing.T, dir string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, "ops.txt"), []byte("aclnnAdd\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "disabled_ops.json"), []byte(`["aclnnAdd"]`), 0644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "_summary_template_data.json"), []byte(testSummaryTemplate()), 0644); err != nil {
@@ -46,9 +46,9 @@ func writeTestConf(t *testing.T, dir string) {
 	if err == nil {
 		os.WriteFile(filepath.Join(dir, "failed_categories.json"), cats, 0644)
 	}
-	unsup, err := os.ReadFile(filepath.Join("..", "..", "conf", "UNSUPPORTED.json"))
+	unsup, err := os.ReadFile(filepath.Join("..", "..", "conf", "unsupported_log.json"))
 	if err == nil {
-		os.WriteFile(filepath.Join(dir, "UNSUPPORTED.json"), unsup, 0644)
+		os.WriteFile(filepath.Join(dir, "unsupported_log.json"), unsup, 0644)
 	}
 }
 
@@ -128,7 +128,7 @@ func TestGenerateReportsWithoutSkipped(t *testing.T) {
 func TestGenerateReportsFailsWithoutCategories(t *testing.T) {
 	confDir := t.TempDir()
 	outDir := t.TempDir()
-	os.WriteFile(filepath.Join(confDir, "ops.txt"), []byte("aclnnAdd\n"), 0644)
+	os.WriteFile(filepath.Join(confDir, "disabled_ops.json"), []byte(`["aclnnAdd"]`), 0644)
 	os.WriteFile(filepath.Join(confDir, "_summary_template_data.json"), []byte(testSummaryTemplate()), 0644)
 
 	if _, err := GenerateReports(testInput(), outDir, os.DirFS(confDir)); err == nil {
@@ -139,7 +139,7 @@ func TestGenerateReportsFailsWithoutCategories(t *testing.T) {
 func TestGenerateReportsFailsWithoutSummaryTemplate(t *testing.T) {
 	confDir := t.TempDir()
 	outDir := t.TempDir()
-	os.WriteFile(filepath.Join(confDir, "ops.txt"), []byte("aclnnAdd\n"), 0644)
+	os.WriteFile(filepath.Join(confDir, "disabled_ops.json"), []byte(`["aclnnAdd"]`), 0644)
 	cats, _ := os.ReadFile(filepath.Join("..", "..", "conf", "failed_categories.json"))
 	os.WriteFile(filepath.Join(confDir, "failed_categories.json"), cats, 0644)
 
@@ -151,7 +151,7 @@ func TestGenerateReportsFailsWithoutSummaryTemplate(t *testing.T) {
 func TestGenerateReportsFailsOnCorruptSummaryTemplate(t *testing.T) {
 	confDir := t.TempDir()
 	outDir := t.TempDir()
-	os.WriteFile(filepath.Join(confDir, "ops.txt"), []byte("aclnnAdd\n"), 0644)
+	os.WriteFile(filepath.Join(confDir, "disabled_ops.json"), []byte(`["aclnnAdd"]`), 0644)
 	os.WriteFile(filepath.Join(confDir, "_summary_template_data.json"), []byte("{not valid json"), 0644)
 	cats, _ := os.ReadFile(filepath.Join("..", "..", "conf", "failed_categories.json"))
 	os.WriteFile(filepath.Join(confDir, "failed_categories.json"), cats, 0644)
@@ -596,7 +596,7 @@ func TestBlacklistJSONOrderAndFormat(t *testing.T) {
 	}
 }
 
-// TestBlacklistIncrementalOpOnly 算子命中（ops.txt）不再增量写入 disabled_testcases，
+// TestBlacklistIncrementalOpOnly 算子命中（disabled_ops.json）不再增量写入 disabled_testcases，
 // 而是单独进入 failed_testcases.xlsx 的「算子失败用例」sheet。
 func TestBlacklistIncrementalOpOnly(t *testing.T) {
 	in := testInput()

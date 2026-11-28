@@ -349,7 +349,7 @@ def main() -> None:
     a = p.parse_args()
 
     if a.fetch_conf:
-        # 文件清单以 blacklist_common.ALL_FILES 为准（U 依赖的 5 个文件），缺一即失败
+        # 文件清单以 blacklist_common.ALL_FILES 为准（U 依赖的 6 个文件），缺一即失败
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import blacklist_common as bc
         fetch_conf_files(a.repo, a.ref, a.conf_path, a.out_dir, list(bc.ALL_FILES))

@@ -57,11 +57,11 @@ type ReportResult struct {
 }
 
 const (
-	opsName              = "ops.txt"
-	apiATenName          = "api-ATen.xlsx"
+	opsName              = "disabled_ops.json"
+	apiATenName          = "disabled_api_aten.json"
 	summaryTemplateName  = "_summary_template_data.json"
 	categoriesConfigName = "failed_categories.json"
-	unsupportedName      = "UNSUPPORTED.json"
+	unsupportedName      = "unsupported_log.json"
 )
 
 // countKV 保序计数（首现顺序 + 计数），供 markdown 稳定排序使用。
@@ -607,7 +607,7 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 				grouped[key] = append(grouped[key], r)
 				continue
 			}
-			// api-ATen 未支持（优先级高于 ops.txt）：完全匹配（词边界），
+			// api-ATen 未支持（优先级高于 disabled_ops.json）：完全匹配（词边界），
 			// 「算子失败用例」sheet 写命中的 API/ATen 名，
 			// all_failed/分组 sheet 失败大类固定为「ATen未实现」。
 			if name := checkAPIATenInMessage(tc.Message, ctx.apiATen); name != "" {
@@ -618,7 +618,7 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 				grouped[key] = append(grouped[key], r)
 				continue
 			}
-			// 算子命中（ops.txt）：分类依据=算子名；
+			// 算子命中（disabled_ops.json）：分类依据=算子名；
 			// 「算子失败用例」sheet 的失败大类按算子名称分，
 			// all_failed/分组 sheet 的失败大类固定为「算子失败-SEG」。
 			if op := checkOpsInMessage(tc.Message, ctx.ops); op != "" {
@@ -680,7 +680,7 @@ func writeFailedTestcases(path string, orderedFiles []fileGroup, ctx *reportCont
 			setCellValueSkippingEmpty(f, sheet, cellName(7, row), r.evidence)
 			f.SetCellStyle(sheet, cellName(7, row), cellName(7, row), styles.WrapLeft)
 
-			// I 列：可能是CANN问题（分类名命中 UNSUPPORTED.json cann_categories）
+			// I 列：可能是CANN问题（分类名命中 unsupported_log.json cann_categories）
 			if ctx.unsupported.IsCANNCategory(r.category) {
 				f.SetCellValue(sheet, cellName(8, row), "是")
 			}
@@ -779,7 +779,7 @@ type runningEntry struct {
 
 // writeBlacklistJSONs 生成 disabled_testcases.json / running_skiped_testcases.json，
 // 对齐 /tmp/20260909 parse_blacklist.py（Step4 按 skip_source 拆分 + Step5/5.5 从用例增量补充），
-// 键序 = 插入序。算子命中（ops.txt）不再增量写入 disabled（改入 failed_testcases 算子失败用例）。
+// 键序 = 插入序。算子命中（disabled_ops.json）不再增量写入 disabled（改入 failed_testcases 算子失败用例）。
 func writeBlacklistJSONs(disabledPath, runningPath string, orderedFiles []fileGroup, ctx *reportContext, skipped []*models.SkippedCase) error {
 	typeMap := ctx.unsupported.TypeMap()
 

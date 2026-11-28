@@ -1,0 +1,246 @@
+{
+  "description": "报错 -> 黑名单文件 路由配置（加入线主判定）。files 以目标 conf 文件名称为 key，key 的先后顺序即匹配优先级；每个文件先用自己的 rules 判定，命中即返回该文件。category 使用上游取值：device not supported / dtype not supported / cann not supported。addable=false 的文件不参与新分组路由（仅用于 U / 删减 / move_passed），其 rules 用 match_basis 说明真实分组依据：paired_log_diff / issue_reason / skip_reason / passed_platform。",
+  "files": {
+    "hardware_unsupported_testcases.json": {
+      "category": "device not supported",
+      "note": "硬件能力限制：double/complex、contiguous/内存格式、8 维上限、未支持 API/ATen",
+      "rules": [
+        {
+          "name": "hardware_double_complex",
+          "type": "regex",
+          "category": "device not supported",
+          "regex": [
+            "not implemented for DT_(DOUBLE|COMPLEX\\w*)",
+            "not implemented for '(ComplexHalf|ComplexDouble|ComplexFloat)'",
+            "BComplex32 has not been supported",
+            "complex number type",
+            "complex for input is not implemented",
+            "DT_(DOUBLE|COMPLEX\\w*) should be in dtype support list",
+            "self dtype \\[DT_(DOUBLE|COMPLEX\\w*)\\] should be in dtype support list",
+            "DT_(DOUBLE|COMPLEX\\w*) can't be cast to the desired output type",
+            "has incorrect dtype DT_(DOUBLE|COMPLEX\\w*)",
+            "promoteType dtype DT_(DOUBLE|COMPLEX\\w*)",
+            "Promote type DT_(DOUBLE|COMPLEX\\w*)",
+            "out cannot be DT_(DOUBLE|COMPLEX\\w*)",
+            "AICPU does not support DT_(DOUBLE|COMPLEX\\w*)",
+            "Double and Float",
+            "to be promotable but check failed",
+            "expected dtype is \\w+ but found DT_(DOUBLE|COMPLEX\\w*)",
+            "expected dtype is DT_(DOUBLE|COMPLEX\\w*)",
+            "Expected both tensors to have same dtype, but found input DT_(DOUBLE|COMPLEX\\w*)",
+            "found input DT_(DOUBLE|COMPLEX\\w*)",
+            "DataType support list is",
+            "All tensors must have the same dtype, got .*(double|Double)"
+          ]
+        },
+        {
+          "name": "hardware_contiguous",
+          "type": "keywords",
+          "category": "device not supported",
+          "keywords": [
+            "contiguous operator only supported contiguous memory format",
+            "Only contiguous_format or preserve_format is supported",
+            "Only c10::MemoryFormat::Contiguous is supported"
+          ]
+        },
+        {
+          "name": "hardware_dim_limit",
+          "type": "keywords",
+          "category": "cann not supported",
+          "keywords": [
+            "cannot be larger than 8 dimensions"
+          ]
+        },
+        {
+          "name": "api_aten",
+          "type": "api_aten",
+          "source": "disabled_api_aten.json",
+          "category": "device not supported",
+          "group_log": "{match}"
+        }
+      ]
+    },
+    "dtype_unsupported_testcases.json": {
+      "category": "dtype not supported",
+      "note": "算子 dtype 覆盖不足、aclnn 调用失败、算子级 CANN 约束",
+      "rules": [
+        {
+          "name": "ops_aclnn",
+          "type": "ops",
+          "source": "disabled_ops.json",
+          "category": "dtype not supported",
+          "group_log": "call {match} failed",
+          "note": "日志含 call <op> failed（取最长）"
+        },
+        {
+          "name": "ops_aclnn_generic",
+          "type": "regex",
+          "category": "dtype not supported",
+          "regex": [
+            "call aclnn\\w+ failed",
+            "call aclnn\\w+"
+          ],
+          "note": "未收录在 disabled_ops.json 的 aclnn 调用失败"
+        },
+        {
+          "name": "dtype_gap",
+          "type": "keywords",
+          "category": "dtype not supported",
+          "keywords": [
+            "not implemented for DT_UINT16",
+            "not implemented for DT_UINT32",
+            "not implemented for DT_UINT64",
+            "not implemented for DT_UINT8",
+            "not implemented for DT_INT8",
+            "not implemented for DT_INT16",
+            "not implemented for DT_INT32",
+            "not implemented for DT_INT64",
+            "not implemented for DT_BOOL",
+            "not implemented for DT_BFLOAT16",
+            "not implemented for DT_FLOAT16",
+            "not implemented for DT_FLOAT8_E4M3FN",
+            "not implemented for DT_FLOAT8_E5M2",
+            "not implemented for DT_FLOAT8_E8M0",
+            "not implemented for DT_FLOAT4_E2M1",
+            "not implemented for DT_FLOAT",
+            "not implemented for index dtype DT_INT8",
+            "should be in dtype support list",
+            "can not promote dtype",
+            "dtype mismatch",
+            "dtype or format of the actual input or output parameter",
+            "Dtypes torch.",
+            "are not equal!",
+            "does not match weight dtype",
+            "type promoting not supported",
+            "Input type (",
+            "has incorrect dtype",
+            "scalar_type:",
+            "expected dtype",
+            "The supported dtypes for",
+            "Format of real, imag and out should be equal",
+            "Format of tensors should be equal",
+            "Object comparison failed: torch.",
+            "Promote type DT_",
+            "promoteType dtype DT_",
+            "has not been supported",
+            "Input format only supports",
+            "cast to the desired output type",
+            "RuntimeError not raised",
+            "self and batch1@batch2 should be both empty tensors",
+            "unitriangular mode only support float",
+            "aclnnConvolutionGetWorkspaceSize have incorrect shapes",
+            "The process exits for this inner error",
+            "Expected both tensors to have same dtype",
+            "orig.dtype"
+          ]
+        },
+        {
+          "name": "cann_constraint",
+          "type": "keywords",
+          "category": "cann not supported",
+          "keywords": [
+            "requires rank > 0",
+            "interpolationMode",
+            "must be half, float, int or short or bfloat16",
+            "The size of tensor self",
+            "The size of tensor selfRef",
+            "Integers to negative integer powers are not allowed",
+            "Autograd not support dtype",
+            "Out type should be integral",
+            "dtype are bool is not supported",
+            "padding size should be less than",
+            "Dim of self should be last 2 dims"
+          ]
+        }
+      ]
+    },
+    "a3a5_log_diff_testcases.json": {
+      "addable": false,
+      "role": "a3_a5_log_diff",
+      "match_basis": "paired_log_diff",
+      "note": "a3/a5 双平台日志差异：实测 48 组、96 条 log 全部成对不同（a3 报错 != a5 报错），category 仅 device/dtype。必须同时拿到双平台日志才能建组，单条报错无法路由；仅参与全集 U 与删减。",
+      "rules": [
+        {
+          "name": "a3_a5_log_diff",
+          "type": "paired_log_diff",
+          "note": "同一 nodeid 在 a3、a5 上失败日志不同才归入此文件（不是按单条报错匹配）",
+          "categories": [
+            "device not supported",
+            "dtype not supported"
+          ],
+          "samples": [
+            "a3: not implemented for DT_DOUBLE | a5: not implemented for DT_UINT8",
+            "a3: not implemented for DT_INT32 | a5: not implemented for DT_UINT8",
+            "a3: The values for attribute 'dtype' do not match: torch.float64 != torch.float32 | a5: torch.float32 != torch.float64",
+            "a3: input must be half, float or bfloat16 | a5: input must be half, float, or bfloat16",
+            "a3: Self dtype DT_INT16 should be in dtype support list | a5: self dtype [DT_INT16] should be in dtype support list",
+            "a3: call aclnnConvolutionBackward failed | a5: Check whether the shape of input/output tensor is correct"
+          ]
+        }
+      ]
+    },
+    "temporary_skiped_grouped.json": {
+      "addable": false,
+      "role": "temporary_skip",
+      "match_basis": "issue_reason",
+      "note": "临时跳过分组（_meta + groups[]），上游按 issue 分成 3 组、共 483 个节点；新增分组需 issue 与 reason 人工确认，不按报错自动建组。节点计入全集 U。",
+      "rules": [
+        {
+          "name": "temporary_skip_groups",
+          "type": "issue_reason",
+          "note": "分组依据是 issue + reason，不是报错文本",
+          "groups": [
+            {
+              "issue": "https://gitcode.com/Ascend/pytorch/issues/5067",
+              "reason": "acl not supported: aclnnInplaceIndexFill (DT_INT8)",
+              "nodes": 4
+            },
+            {
+              "issue": "https://gitcode.com/Ascend/pytorch/issues/6026",
+              "reason": "NPU sparse/CSR 稀疏算子实现不完整",
+              "nodes": 432
+            },
+            {
+              "issue": "https://onebox.huawei.com/v/2490e37c86f9f6c499944b85ce5e053d?type=1&sheet=API支持数据",
+              "reason": "ATen算子未实现：Tensor.log_normal_、aten::_sparse_log_softmax、aten::_sparse_softmax、aten::_sparse_sparse_matmul、aten::empty_quantized 等",
+              "nodes": 47
+            }
+          ]
+        }
+      ]
+    },
+    "running_skiped_testcases.json": {
+      "addable": false,
+      "role": "running_skip",
+      "match_basis": "skip_reason",
+      "note": "运行中跳过清单（nodeid -> {reason}），实测 2278 条、reason 全部为 \"Only runs on cuda\"；只记录跳过原因、不含报错日志，不参与报错路由。节点计入全集 U 与索引，补丁改写交人工。",
+      "rules": [
+        {
+          "name": "cuda_only_skip",
+          "type": "skip_reason",
+          "keywords": [
+            "Only runs on cuda"
+          ],
+          "note": "上游 2278 条均为该原因；这类用例在 NPU 上应 skip，不应作为 failed 加入黑名单"
+        }
+      ]
+    },
+    "platform_passed_diff.json": {
+      "addable": false,
+      "role": "platform_passed_diff",
+      "match_basis": "passed_platform",
+      "note": "a3/a5 单平台通过清单（passed_a3 1032 条、passed_a5 564 条），供删减线判断 move_passed，不是报错目标文件，没有报错文本可匹配。",
+      "rules": [
+        {
+          "name": "platform_passed",
+          "type": "passed_platform",
+          "fields": [
+            "passed_a3",
+            "passed_a5"
+          ],
+          "note": "单平台通过 -> move_passed；双平台通过 -> remove"
+        }
+      ]
+    }
+  }
+}
